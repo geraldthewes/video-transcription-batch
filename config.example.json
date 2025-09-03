@@ -1,0 +1,22 @@
+{
+  "s3": {
+    "access_key": "AKIA...",
+    "secret_key": "your-secret-access-key",
+    "region": "us-east-1",
+    "video_bucket": "yt-videos-bucket",
+    "output_bucket": "transcripts-bucket",
+    "prefix": "processed/",
+    "endpoint": ""
+  },
+  "mst": {
+    "hf_token": "hf_...",
+    "ollama_url": "http://ollama-host:11434",
+    "whisper_model": "whisper-turbo",
+    "llm_model": "llama3",
+    "embedding_model": "nomic-embed-text",
+    "min_segment_size": 5
+  },
+  "download_options": {
+    "yt_dlp_format": "best"
+  }
+}
