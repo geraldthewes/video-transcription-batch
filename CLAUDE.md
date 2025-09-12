@@ -66,12 +66,13 @@ Use the MCP build service tools (available in Claude sessions after MCP server i
 - Rootless Buildah for secure builds
 
 ### Build Status
-🔄 **In Progress**: Job `278de965-6153-4e0e-9008-c1363d612362` - v4.0.0 (PUBLISHING phase)
+✅ **Latest Build**: Job `278de965-6153-4e0e-9008-c1363d612362` completed successfully on 2025-09-12 - v4.0.0
 - **Major Refactor**: Unified S3 structure and environment-based configuration
 - Simplified transcriber bucket with organized job directories
 - Removed legacy video/output bucket separation
 - Added config.json support for per-job transcription parameters
 - Container environment variable simplification
+- Image: `registry.cluster:5000/video-transcription-batch:v4.0.0`
 
 ✅ **Previous Builds**: 
 - Job `399b9a73-084e-4352-a5d0-76ea9a8c7c83` (v3.0.0) - S3-only configuration
@@ -86,71 +87,7 @@ The built container includes:
 - FFmpeg for audio/video processing
 - Multi-step transcriber dependencies
 
-## Simplified S3 Configuration (v4.0.0+)
-
-### Overview
-Version 4.0.0 introduces a major simplification with unified S3 paths and environment-based configuration. All transcription data is organized under a single S3 bucket and prefix structure, with job-specific parameters moved to upload time.
-
-**Breaking Changes in v4.0.0**:
-- Unified S3 path structure: `s3://<S3_TRANSCRIBER_BUCKET>/<S3_TRANSCRIBER_PREFIX>/<job-uuid>/`
-- Environment-based configuration using `.env` files
-- Transcription parameters moved to job submission instead of environment variables
-
-### S3 Path Structure
-
-Each transcription job is organized under a UUID-based directory:
-```
-s3://<S3_TRANSCRIBER_BUCKET>/<S3_TRANSCRIBER_PREFIX>/<job-uuid>/
-├── tasks.json          # Video tasks to process
-├── config.json         # Transcription parameters (optional)
-├── results.json        # Processing results
-├── inputs/             # Downloaded video files
-└── outputs/            # Generated transcripts and metadata
-```
-
-### Environment Configuration
-
-Create a `.env` file from the template:
-```bash
-# Copy template and customize
-cp env-template .env
-# Edit .env with your actual values
-```
-
-**Required Configuration (.env):**
-```bash
-# AWS S3 Configuration (for client tools only)
-S3_TRANSCRIBER_BUCKET=my-transcriber-bucket
-S3_TRANSCRIBER_PREFIX=jobs
-AWS_REGION=us-east-1
-
-# Transcription Service URLs
-OLLAMA_URL=http://ollama.service.consul:11434
-
-# Optional: Deployment Configuration
-S3_ENDPOINT_URL=https://s3.custom.com
-NOMAD_ADDR=http://nomad.service.consul:4646
-VAULT_ADDR=https://vault.service.consul:8200
-
-# NOTE: Secrets (AWS credentials, HF tokens) are handled by Vault in production
-```
-
-### Vault Setup
-
-Store secrets in Vault for secure deployment:
-
-```bash
-# AWS credentials for S3 access
-vault kv put secret/aws/transcription \
-  access_key="AKIA..." \
-  secret_key="xxx..."
-
-# Optional: HuggingFace token for model access
-vault kv put secret/hf/transcription \
-  token="hf_xxx..."
-```
-
-### Nomad Integration Example
+## Nomad Integration Example
 
 ```hcl
 job "video-transcription" {
@@ -198,6 +135,62 @@ EOF
     }
   }
 }
+```
+
+## Configuration
+
+### Environment Configuration (.env file)
+
+Version 4.0.0 uses a simplified `.env` file approach:
+
+```bash
+# Copy template and customize
+cp env-template .env
+```
+
+**Required Configuration (.env):**
+```bash
+# AWS S3 Configuration (for client tools only)
+S3_TRANSCRIBER_BUCKET=my-transcriber-bucket
+S3_TRANSCRIBER_PREFIX=jobs
+AWS_REGION=us-east-1
+
+# Transcription Service URLs
+OLLAMA_URL=http://ollama.service.consul:11434
+
+# Optional: Deployment Configuration
+S3_ENDPOINT_URL=https://s3.custom.com
+NOMAD_ADDR=http://nomad.service.consul:4646
+VAULT_ADDR=https://vault.service.consul:8200
+
+# NOTE: Secrets (AWS credentials, HF tokens) are handled by Vault in production
+```
+
+### Vault Setup
+
+Store secrets in Vault for secure deployment:
+
+```bash
+# AWS credentials for S3 access
+vault kv put secret/aws/transcription \
+  access_key="AKIA..." \
+  secret_key="xxx..."
+
+# Optional: HuggingFace token for model access
+vault kv put secret/hf/transcription \
+  token="hf_xxx..."
+```
+
+### S3 Path Structure
+
+Each transcription job is organized under a UUID-based directory:
+```
+s3://<S3_TRANSCRIBER_BUCKET>/<S3_TRANSCRIBER_PREFIX>/<job-uuid>/
+├── tasks.json          # Video tasks to process
+├── config.json         # Transcription parameters (optional)
+├── results.json        # Processing results
+├── inputs/             # Downloaded video files
+└── outputs/            # Generated transcripts and metadata
 ```
 
 ## Python Client Package
@@ -300,9 +293,6 @@ result = client.get_result(job.id)
 
 ## Scripts
 - `yt-channel.py`: Extract video URLs from YouTube channels using the YouTube Data API
-
-## Configuration
-Copy example config files from `config/` directory and customize for your environment.
 
 ---
 

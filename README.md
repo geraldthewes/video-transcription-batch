@@ -25,6 +25,65 @@ This service processes batches of YouTube videos with high-quality transcription
 - **Python Client Package**: Job management utilities and API clients
 - **CLI Tools**: Batch job management and Nomad integration utilities
 
+## Configuration
+
+### Environment Configuration (.env file)
+
+Version 4.0.0 uses a simplified `.env` file approach:
+
+```bash
+# Copy template and customize
+cp env-template .env
+```
+
+**Required Configuration:**
+```bash
+# S3 Configuration
+S3_TRANSCRIBER_BUCKET=my-transcriber-bucket
+S3_TRANSCRIBER_PREFIX=jobs
+AWS_REGION=us-east-1
+
+# Service URLs
+OLLAMA_URL=http://ollama.service.consul:11434
+```
+
+**Optional Configuration:**
+```bash
+# Custom S3 endpoint
+S3_ENDPOINT_URL=https://s3.custom.com
+
+# Deployment Configuration
+NOMAD_ADDR=http://nomad.service.consul:4646
+VAULT_ADDR=https://vault.service.consul:8200
+```
+
+### Vault Setup
+
+Store secrets in Vault for secure deployment:
+
+```bash
+# AWS credentials for S3 access
+vault kv put secret/aws/transcription \
+  access_key="AKIA..." \
+  secret_key="xxx..."
+
+# Optional: HuggingFace token for model access
+vault kv put secret/hf/transcription \
+  token="hf_xxx..."
+```
+
+### S3 Structure
+
+Each job is organized under a UUID-based directory:
+```
+s3://transcriber-bucket/prefix/job-uuid/
+├── tasks.json          # Video tasks to process
+├── config.json         # Transcription parameters
+├── results.json        # Processing results  
+├── inputs/             # Downloaded videos
+└── outputs/            # Generated transcripts
+```
+
 ## Quick Start
 
 ```bash
@@ -54,54 +113,6 @@ docker run --gpus all \
   -e AWS_SECRET_ACCESS_KEY=xxx \
   -e OLLAMA_URL=http://ollama:11434 \
   registry.cluster:5000/video-transcription-batch:v4.0.0
-```
-
-## Configuration
-
-### Environment Configuration (.env file)
-
-Version 4.0.0 uses a simplified `.env` file approach:
-
-```bash
-# Copy template and customize
-cp env-template .env
-```
-
-**Required Configuration:**
-```bash
-# S3 Configuration
-S3_TRANSCRIBER_BUCKET=my-transcriber-bucket
-S3_TRANSCRIBER_PREFIX=jobs
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=AKIA...
-AWS_SECRET_ACCESS_KEY=xxx...
-
-# Service URLs
-OLLAMA_URL=http://ollama.service.consul:11434
-```
-
-**Optional Configuration:**
-```bash
-# Custom S3 endpoint
-S3_ENDPOINT_URL=https://s3.custom.com
-
-# HuggingFace token for models
-HF_TOKEN=hf_xxx...
-
-# Nomad deployment URL
-NOMAD_ADDR=http://nomad.service.consul:4646
-```
-
-### S3 Structure
-
-Each job is organized under a UUID-based directory:
-```
-s3://transcriber-bucket/prefix/job-uuid/
-├── tasks.json          # Video tasks to process
-├── config.json         # Transcription parameters
-├── results.json        # Processing results  
-├── inputs/             # Downloaded videos
-└── outputs/            # Generated transcripts
 ```
 
 ## CLI Utilities
@@ -155,21 +166,6 @@ generate-nomad-job \
 This generates a complete Nomad job spec with Vault integration for secrets.
 
 ## Nomad Deployment
-
-### Vault Setup
-
-Store secrets in Vault for secure deployment:
-
-```bash
-# AWS credentials for S3 access
-vault kv put secret/aws/transcription \
-  access_key="AKIA..." \
-  secret_key="xxx..."
-
-# Optional: HuggingFace token for model access
-vault kv put secret/hf/transcription \
-  token="hf_xxx..."
-```
 
 ### Example Nomad Job (v4.0.0)
 
