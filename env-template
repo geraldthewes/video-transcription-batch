@@ -1,0 +1,18 @@
+# AWS S3 Configuration
+S3_TRANSCRIBER_BUCKET=<your-transcriber-bucket>
+S3_TRANSCRIBER_PREFIX=<your-prefix>
+S3_ENDPOINT_URL=<your-s3-endpoint-url>
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=<your-aws-access-key>
+AWS_SECRET_ACCESS_KEY=<your-aws-secret-key>
+
+# Transcription Service Configuration  
+OLLAMA_URL=<your-ollama-url>
+S3_VIDEO_BUCKET=<your-video-bucket>
+S3_OUTPUT_BUCKET=<your-output-bucket>
+
+# Optional: Nomad Configuration for deployment
+NOMAD_ADDR=<your-nomad-addr>
+
+# Optional: HuggingFace Token
+HF_TOKEN=<your-hf-token>

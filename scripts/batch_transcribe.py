@@ -20,34 +20,85 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+def load_env_file(env_file: str = '.env'):
+    """
+    Load environment variables from .env file.
+    
+    Args:
+        env_file: Path to the .env file
+    """
+    env_path = Path(env_file)
+    if not env_path.exists():
+        logger.warning(f"Environment file not found: {env_file}")
+        return
+    
+    with open(env_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and not os.getenv(key):  # Don't override existing env vars
+                    os.environ[key] = value
+    
+    logger.info(f"Loaded environment variables from {env_file}")
+
+
+def create_manager_from_env() -> S3BatchManager:
+    """Create S3BatchManager using environment variables."""
+    return S3BatchManager(
+        aws_region=os.getenv('AWS_REGION', 'us-east-1'),
+        s3_endpoint=os.getenv('S3_ENDPOINT_URL'),
+        transcriber_bucket=os.getenv('S3_TRANSCRIBER_BUCKET'),
+        transcriber_prefix=os.getenv('S3_TRANSCRIBER_PREFIX', ''),
+    )
+
+
 def upload_tasks(args):
     """Upload tasks from a JSON file to S3."""
-    manager = S3BatchManager(
-        aws_region=args.region,
-        s3_endpoint=args.s3_endpoint,
-        tasks_bucket=args.tasks_bucket,
-        results_bucket=args.results_bucket
-    )
+    manager = create_manager_from_env()
     
     # Load tasks from file
     tasks = manager.load_tasks_file(args.tasks_file)
     
+    # Create transcription configuration
+    transcription_config = {}
+    if hasattr(args, 'whisper_model') and args.whisper_model:
+        transcription_config['whisper_model'] = args.whisper_model
+    if hasattr(args, 'llm_model') and args.llm_model:
+        transcription_config['llm_model'] = args.llm_model
+    if hasattr(args, 'embedding_model') and args.embedding_model:
+        transcription_config['embedding_model'] = args.embedding_model
+    if hasattr(args, 'min_segment_size') and args.min_segment_size:
+        transcription_config['min_segment_size'] = args.min_segment_size
+    if hasattr(args, 'speaker_diarization') and args.speaker_diarization is not None:
+        transcription_config['speaker_diarization'] = args.speaker_diarization
+    if hasattr(args, 'yt_dlp_format') and args.yt_dlp_format:
+        transcription_config['yt_dlp_format'] = args.yt_dlp_format
+    
     # Upload to S3
-    job_id = manager.upload_tasks(tasks, job_id=args.job_id)
+    job_id = manager.upload_tasks(
+        tasks, 
+        job_id=args.job_id,
+        transcription_config=transcription_config if transcription_config else None
+    )
     
     print(f"✅ Uploaded {len(tasks)} tasks to S3")
     print(f"📋 Job ID: {job_id}")
-    print(f"🗂️  Tasks: s3://{manager.tasks_bucket}/jobs/{job_id}/tasks.json")
-    print(f"📊 Results: s3://{manager.results_bucket}/jobs/{job_id}/results.json")
+    print(f"🗂️  Tasks: s3://{manager.transcriber_bucket}/{manager.transcriber_prefix}{job_id}/tasks.json")
+    print(f"📊 Results: s3://{manager.transcriber_bucket}/{manager.transcriber_prefix}{job_id}/results.json")
+    print(f"📁 Inputs: s3://{manager.transcriber_bucket}/{manager.transcriber_prefix}{job_id}/inputs/")
+    print(f"📁 Outputs: s3://{manager.transcriber_bucket}/{manager.transcriber_prefix}{job_id}/outputs/")
     
     # Generate environment variables for Nomad
     if args.generate_env:
         env_vars = manager.create_nomad_env_vars(
             job_id=job_id,
-            video_bucket=args.video_bucket or 'video-bucket',
-            output_bucket=args.output_bucket or 'transcripts-bucket',
-            ollama_url=args.ollama_url or 'http://ollama:11434',
-            hf_token=args.hf_token
+            video_bucket=args.video_bucket or os.getenv('S3_VIDEO_BUCKET', 'video-bucket'),
+            output_bucket=args.output_bucket or os.getenv('S3_OUTPUT_BUCKET', 'transcripts-bucket'),
+            ollama_url=args.ollama_url or os.getenv('OLLAMA_URL', 'http://ollama:11434'),
+            hf_token=args.hf_token or os.getenv('HF_TOKEN')
         )
         
         print("\n🔧 Nomad Environment Variables:")
@@ -57,12 +108,7 @@ def upload_tasks(args):
 
 def status(args):
     """Check the status of a transcription job."""
-    manager = S3BatchManager(
-        aws_region=args.region,
-        s3_endpoint=args.s3_endpoint,
-        tasks_bucket=args.tasks_bucket,
-        results_bucket=args.results_bucket
-    )
+    manager = create_manager_from_env()
     
     status_info = manager.get_job_status(args.job_id)
     
@@ -79,12 +125,7 @@ def status(args):
 
 def list_jobs(args):
     """List all transcription jobs."""
-    manager = S3BatchManager(
-        aws_region=args.region,
-        s3_endpoint=args.s3_endpoint,
-        tasks_bucket=args.tasks_bucket,
-        results_bucket=args.results_bucket
-    )
+    manager = create_manager_from_env()
     
     job_ids = manager.list_jobs()
     
@@ -109,12 +150,7 @@ def list_jobs(args):
 
 def download_results(args):
     """Download results from S3 to a local file."""
-    manager = S3BatchManager(
-        aws_region=args.region,
-        s3_endpoint=args.s3_endpoint,
-        tasks_bucket=args.tasks_bucket,
-        results_bucket=args.results_bucket
-    )
+    manager = create_manager_from_env()
     
     results = manager.download_results(args.job_id)
     
@@ -129,6 +165,22 @@ def download_results(args):
         json.dump(results, f, indent=2, ensure_ascii=False)
     
     print(f"✅ Downloaded {len(results)} results to {output_path}")
+
+
+def view_config(args):
+    """View transcription configuration for a job."""
+    manager = create_manager_from_env()
+    
+    config = manager.download_config(args.job_id)
+    
+    if not config:
+        print(f"❌ No transcription config found for job {args.job_id}")
+        return
+    
+    print(f"📋 Job ID: {args.job_id}")
+    print("🔧 Transcription Configuration:")
+    for key, value in config.items():
+        print(f"   {key}: {value}")
 
 
 def create_tasks(args):
@@ -171,16 +223,22 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Setup: Copy and customize environment file
+  cp env-template .env && nano .env
+  
   # Create tasks file
   python -m scripts.batch_transcribe create-task --output my-videos.json
 
-  # Upload tasks and get Nomad environment variables  
-  python -m scripts.batch_transcribe upload my-videos.json --generate-env \\
-    --video-bucket my-videos --output-bucket my-transcripts \\
-    --ollama-url http://ollama.example.com:11434
+  # Upload tasks with transcription parameters
+  python -m scripts.batch_transcribe upload my-videos.json \\
+    --whisper-model whisper-turbo --speaker-diarization \\
+    --min-segment-size 5 --generate-env
 
   # Check job status
   python -m scripts.batch_transcribe status abc-123-def
+  
+  # View transcription configuration
+  python -m scripts.batch_transcribe config abc-123-def
 
   # List all jobs
   python -m scripts.batch_transcribe list
@@ -190,11 +248,8 @@ Examples:
         """
     )
     
-    # Common arguments
-    parser.add_argument('--region', default='us-east-1', help='AWS region')
-    parser.add_argument('--s3-endpoint', help='Custom S3 endpoint URL')
-    parser.add_argument('--tasks-bucket', help='S3 bucket for tasks (or set S3_TASKS_BUCKET env var)')
-    parser.add_argument('--results-bucket', help='S3 bucket for results (defaults to tasks bucket)')
+    # Configuration
+    parser.add_argument('--env-file', default='.env', help='Environment file to load (default: .env)')
     
     subparsers = parser.add_subparsers(dest='command', help='Commands')
     
@@ -209,6 +264,15 @@ Examples:
     upload_parser.add_argument('--ollama-url', help='Ollama service URL (required with --generate-env)')
     upload_parser.add_argument('--hf-token', help='HuggingFace token')
     
+    # Transcription parameters
+    upload_parser.add_argument('--whisper-model', help='Whisper model to use (e.g., whisper-turbo)')
+    upload_parser.add_argument('--llm-model', help='LLM model to use (e.g., llama3)')  
+    upload_parser.add_argument('--embedding-model', help='Embedding model to use (e.g., nomic-embed-text)')
+    upload_parser.add_argument('--min-segment-size', type=int, help='Minimum segment size in seconds')
+    upload_parser.add_argument('--speaker-diarization', action='store_true', help='Enable speaker diarization')
+    upload_parser.add_argument('--no-speaker-diarization', dest='speaker_diarization', action='store_false', help='Disable speaker diarization')
+    upload_parser.add_argument('--yt-dlp-format', help='yt-dlp format string (e.g., best)')
+    
     # Status command
     status_parser = subparsers.add_parser('status', help='Check job status')
     status_parser.add_argument('job_id', help='Job ID to check')
@@ -221,6 +285,10 @@ Examples:
     download_parser.add_argument('job_id', help='Job ID to download results for')
     download_parser.add_argument('--output', help='Output file path (default: results-{job_id}.json)')
     
+    # Config command
+    config_parser = subparsers.add_parser('config', help='View transcription configuration for a job')
+    config_parser.add_argument('job_id', help='Job ID to view config for')
+    
     # Create task command
     task_parser = subparsers.add_parser('create-task', help='Create tasks.json file with example content')
     task_parser.add_argument('--output', help='Output file path (default: <uuid>.json)')
@@ -231,6 +299,9 @@ Examples:
         parser.print_help()
         sys.exit(1)
     
+    # Load environment variables
+    load_env_file(args.env_file)
+    
     try:
         if args.command == 'upload':
             upload_tasks(args)
@@ -240,6 +311,8 @@ Examples:
             list_jobs(args)
         elif args.command == 'download':
             download_results(args)
+        elif args.command == 'config':
+            view_config(args)
         elif args.command == 'create-task':
             create_tasks(args)
             

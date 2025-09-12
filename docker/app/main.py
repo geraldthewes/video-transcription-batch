@@ -180,16 +180,18 @@ def create_config_from_env() -> Dict:
     """Create configuration dictionary from environment variables."""
     return {
         's3': {
+            'transcriber_bucket': os.getenv('S3_TRANSCRIBER_BUCKET'),
+            'transcriber_prefix': os.getenv('S3_TRANSCRIBER_PREFIX', ''),
+            'job_id': os.getenv('S3_JOB_ID'),
             'video_bucket': os.getenv('S3_VIDEO_BUCKET', 'video-bucket'),
             'output_bucket': os.getenv('S3_OUTPUT_BUCKET', 'transcripts-bucket'),
-            'tasks_bucket': os.getenv('S3_TASKS_BUCKET', 'tasks-bucket'),
-            'prefix': os.getenv('S3_PREFIX', 'processed/'),
             'region': os.getenv('AWS_REGION', 'us-east-1'),
             'endpoint': os.getenv('S3_ENDPOINT', '')
         },
         'mst': {
             'hf_token': os.getenv('HF_TOKEN', ''),
             'ollama_url': os.getenv('OLLAMA_URL', 'http://localhost:11434'),
+            # Default values - will be overridden by config.json if present
             'whisper_model': os.getenv('WHISPER_MODEL', 'whisper-turbo'),
             'llm_model': os.getenv('LLM_MODEL', 'llama3'),
             'embedding_model': os.getenv('EMBEDDING_MODEL', 'nomic-embed-text'),
@@ -201,26 +203,28 @@ def create_config_from_env() -> Dict:
     }
 
 
-def setup_mst() -> MultiStepTranscriber:
-    """Setup Multi-Step Transcriber from environment variables."""
+def setup_mst(config: Dict) -> MultiStepTranscriber:
+    """Setup Multi-Step Transcriber from configuration."""
+    mst_config = config['mst']
+    
     # Set HuggingFace token if provided
-    hf_token = os.getenv('HF_TOKEN')
+    hf_token = mst_config.get('hf_token')
     if hf_token:
         os.environ['HF_TOKEN'] = hf_token
     
-    # Initialize MST with configuration from environment
+    # Initialize MST with configuration
     mst = MultiStepTranscriber(
-        ollama_url=os.getenv('OLLAMA_URL', 'http://localhost:11434'),
-        whisper_model=os.getenv('WHISPER_MODEL', 'whisper-turbo'),
-        llm_model=os.getenv('LLM_MODEL', 'llama3'),
-        embedding_model=os.getenv('EMBEDDING_MODEL', 'nomic-embed-text'),
+        ollama_url=mst_config['ollama_url'],
+        whisper_model=mst_config['whisper_model'],
+        llm_model=mst_config['llm_model'],
+        embedding_model=mst_config['embedding_model'],
     )
     
     return mst
 
 
 def transcribe_audio(mst: MultiStepTranscriber, audio_path: str, video_metadata: Dict, 
-                    speaker_diarization: bool, config: Dict) -> Dict[str, str]:
+                    speaker_diarization: bool, config: Dict, transcription_config: Dict) -> Dict[str, str]:
     """Transcribe audio using MST and return paths to output files."""
     mst_config = config['mst']
     
@@ -229,8 +233,10 @@ def transcribe_audio(mst: MultiStepTranscriber, audio_path: str, video_metadata:
         'enable_speaker_diarization': speaker_diarization,
     }
     
-    # Add any additional MST parameters from config
-    if 'min_segment_size' in mst_config:
+    # Add parameters from transcription_config (overrides defaults)
+    if 'min_segment_size' in transcription_config:
+        transcribe_params['min_segment_size'] = transcription_config['min_segment_size']
+    elif 'min_segment_size' in mst_config:
         transcribe_params['min_segment_size'] = mst_config['min_segment_size']
     
     try:
@@ -253,8 +259,8 @@ def transcribe_audio(mst: MultiStepTranscriber, audio_path: str, video_metadata:
         raise
 
 
-def process_video(task: Dict, config: Dict, s3_client, mst: MultiStepTranscriber, 
-                 speaker_diarization: bool, results: List[Dict]) -> Dict:
+def process_video(task: Dict, config: Dict, transcription_config: Dict, s3_client, mst: MultiStepTranscriber, 
+                 results: List[Dict]) -> Dict:
     """Process a single video task."""
     video_id = extract_video_id(task['url'])
     logger.info(f"Processing video {video_id}: {task['title']}")
@@ -274,13 +280,18 @@ def process_video(task: Dict, config: Dict, s3_client, mst: MultiStepTranscriber
         
         # Check idempotency - see if outputs already exist in S3
         s3_config = config['s3']
-        prefix = s3_config.get('prefix', '')
+        transcriber_prefix = s3_config.get('transcriber_prefix', '')
+        job_id = s3_config['job_id']
         
-        md_key = f"{prefix}{channel}/{video_id}/{video_id}_transcript.md"
-        json_key = f"{prefix}{channel}/{video_id}/{video_id}_transcript.json"
+        # Ensure prefix ends with / if not empty
+        if transcriber_prefix and not transcriber_prefix.endswith('/'):
+            transcriber_prefix += '/'
+            
+        md_key = f"{transcriber_prefix}{job_id}/outputs/{channel}/{video_id}/{video_id}_transcript.md"
+        json_key = f"{transcriber_prefix}{job_id}/outputs/{channel}/{video_id}/{video_id}_transcript.json"
         
-        if (check_s3_object_exists(s3_client, s3_config['output_bucket'], md_key) and
-            check_s3_object_exists(s3_client, s3_config['output_bucket'], json_key)):
+        if (check_s3_object_exists(s3_client, s3_config['transcriber_bucket'], md_key) and
+            check_s3_object_exists(s3_client, s3_config['transcriber_bucket'], json_key)):
             logger.info(f"Outputs already exist for {video_id}, skipping")
             result['status'] = 'skipped'
             return result
@@ -302,9 +313,9 @@ def process_video(task: Dict, config: Dict, s3_client, mst: MultiStepTranscriber
             logger.info(f"Downloading video {video_id}")
             download_video(task['url'], video_path, config)
             
-            # Upload video to S3
-            video_s3_key = f"{prefix}{channel}/{video_id}/{video_id}.mp4"
-            if not upload_to_s3(s3_client, video_path, s3_config['video_bucket'], video_s3_key):
+            # Upload video to S3 inputs directory
+            video_s3_key = f"{transcriber_prefix}{job_id}/inputs/{channel}/{video_id}/{video_id}.mp4"
+            if not upload_to_s3(s3_client, video_path, s3_config['transcriber_bucket'], video_s3_key):
                 raise Exception("Failed to upload video to S3")
             
             # Extract audio
@@ -313,15 +324,16 @@ def process_video(task: Dict, config: Dict, s3_client, mst: MultiStepTranscriber
             
             # Transcribe with MST
             logger.info(f"Transcribing {video_id} with MST")
+            speaker_diarization = transcription_config.get('speaker_diarization', True)
             transcription_outputs = transcribe_audio(
-                mst, audio_path, task, speaker_diarization, config
+                mst, audio_path, task, speaker_diarization, config, transcription_config
             )
             
             # Upload transcription outputs to S3
             if transcription_outputs['markdown_path']:
                 md_uploaded = upload_to_s3(
                     s3_client, transcription_outputs['markdown_path'], 
-                    s3_config['output_bucket'], md_key
+                    s3_config['transcriber_bucket'], md_key
                 )
             else:
                 md_uploaded = False
@@ -329,7 +341,7 @@ def process_video(task: Dict, config: Dict, s3_client, mst: MultiStepTranscriber
             if transcription_outputs['json_path']:
                 json_uploaded = upload_to_s3(
                     s3_client, transcription_outputs['json_path'],
-                    s3_config['output_bucket'], json_key
+                    s3_config['transcriber_bucket'], json_key
                 )
             else:
                 json_uploaded = False
@@ -367,6 +379,33 @@ def load_json_file(file_path: str, required: bool = True) -> Optional[Any]:
         return None
 
 
+def load_and_merge_transcription_config(config: Dict, transcription_config: Dict) -> Dict:
+    """Load transcription config and merge with MST defaults."""
+    mst_config = config['mst'].copy()
+    
+    # Override with transcription-specific config
+    if 'whisper_model' in transcription_config:
+        mst_config['whisper_model'] = transcription_config['whisper_model']
+    if 'llm_model' in transcription_config:
+        mst_config['llm_model'] = transcription_config['llm_model']  
+    if 'embedding_model' in transcription_config:
+        mst_config['embedding_model'] = transcription_config['embedding_model']
+    if 'min_segment_size' in transcription_config:
+        mst_config['min_segment_size'] = transcription_config['min_segment_size']
+    
+    # Override download options
+    download_options = config['download_options'].copy()
+    if 'yt_dlp_format' in transcription_config:
+        download_options['yt_dlp_format'] = transcription_config['yt_dlp_format']
+    
+    # Create updated config
+    updated_config = config.copy()
+    updated_config['mst'] = mst_config
+    updated_config['download_options'] = download_options
+    
+    return updated_config
+
+
 def save_results(results: List[Dict], output_path: str = '/app/results.json', 
                  s3_client=None, bucket: str = None, s3_key: str = None):
     """Save results to JSON file and optionally upload to S3."""
@@ -385,10 +424,19 @@ def save_results(results: List[Dict], output_path: str = '/app/results.json',
 
 def main():
     """Main entry point."""
-    logger.info("Starting YouTube Video Transcription Service")
+    logger.info("Starting YouTube Video Transcription Service v4.0.0")
     
     # Create configuration from environment variables
     config = create_config_from_env()
+    s3_config = config['s3']
+    
+    # Validate required environment variables
+    if not s3_config['transcriber_bucket']:
+        logger.error("S3_TRANSCRIBER_BUCKET environment variable is required")
+        sys.exit(1)
+    if not s3_config['job_id']:
+        logger.error("S3_JOB_ID environment variable is required")
+        sys.exit(1)
     
     # Setup S3 client from environment
     try:
@@ -398,29 +446,43 @@ def main():
         logger.error(f"Failed to setup S3 client: {e}")
         sys.exit(1)
     
-    # Download tasks.json from S3
-    tasks_bucket = os.getenv('S3_TASKS_BUCKET')
-    tasks_key = os.getenv('S3_TASKS_KEY', 'tasks.json')
+    # Construct S3 paths using new structure
+    transcriber_prefix = s3_config['transcriber_prefix']
+    if transcriber_prefix and not transcriber_prefix.endswith('/'):
+        transcriber_prefix += '/'
+    job_id = s3_config['job_id']
     
-    if not tasks_bucket:
-        logger.error("S3_TASKS_BUCKET environment variable is required")
-        sys.exit(1)
-        
+    tasks_key = f"{transcriber_prefix}{job_id}/tasks.json"
+    config_key = f"{transcriber_prefix}{job_id}/config.json"
+    results_key = f"{transcriber_prefix}{job_id}/results.json"
+    
+    # Download tasks.json from S3
     tasks_path = '/tmp/tasks.json'
-    if not download_json_from_s3(s3_client, tasks_bucket, tasks_key, tasks_path):
-        logger.error(f"Failed to download tasks from s3://{tasks_bucket}/{tasks_key}")
+    if not download_json_from_s3(s3_client, s3_config['transcriber_bucket'], tasks_key, tasks_path):
+        logger.error(f"Failed to download tasks from s3://{s3_config['transcriber_bucket']}/{tasks_key}")
         sys.exit(1)
         
     tasks = load_json_file(tasks_path, required=True)
     logger.info(f"Downloaded and loaded {len(tasks)} video tasks from S3")
     
-    # Try to download existing results.json from S3
-    results_bucket = os.getenv('S3_RESULTS_BUCKET', tasks_bucket)
-    results_key = os.getenv('S3_RESULTS_KEY', 'results.json')
-    results_path = '/tmp/results.json'
+    # Try to download transcription config.json from S3
+    transcription_config = {}
+    config_path = '/tmp/config.json'
+    if download_json_from_s3(s3_client, s3_config['transcriber_bucket'], config_key, config_path):
+        transcription_config = load_json_file(config_path, required=False) or {}
+        logger.info(f"Downloaded transcription config with {len(transcription_config)} parameters")
+    else:
+        logger.info("No transcription config found, using defaults")
     
+    # Merge transcription config with base config
+    if transcription_config:
+        config = load_and_merge_transcription_config(config, transcription_config)
+        logger.info("Applied transcription-specific configuration")
+    
+    # Try to download existing results.json from S3
+    results_path = '/tmp/results.json'
     existing_results = []
-    if download_json_from_s3(s3_client, results_bucket, results_key, results_path):
+    if download_json_from_s3(s3_client, s3_config['transcriber_bucket'], results_key, results_path):
         existing_results = load_json_file(results_path, required=False) or []
         logger.info(f"Downloaded and loaded {len(existing_results)} existing results from S3")
     else:
@@ -428,7 +490,7 @@ def main():
     
     # Setup MST from environment
     try:
-        mst = setup_mst()
+        mst = setup_mst(config)
         logger.info("Multi-Step Transcriber initialized")
     except Exception as e:
         logger.error(f"Failed to setup MST: {e}")
@@ -439,10 +501,6 @@ def main():
         logger.error("Tasks must be an array of video tasks")
         sys.exit(1)
     
-    # Get speaker diarization setting from environment
-    speaker_diarization = os.getenv('SPEAKER_DIARIZATION', 'true').lower() == 'true'
-    logger.info(f"Speaker diarization: {'enabled' if speaker_diarization else 'disabled'}")
-    
     # Process videos
     results = []
     any_failures = False
@@ -450,14 +508,14 @@ def main():
     # Setup result saving parameters
     save_params = {
         's3_client': s3_client,
-        'bucket': results_bucket,
+        'bucket': s3_config['transcriber_bucket'],
         's3_key': results_key
     }
     
     try:
         for task in tqdm(tasks, desc="Processing videos"):
             result = process_video(
-                task, config, s3_client, mst, speaker_diarization, existing_results
+                task, config, transcription_config, s3_client, mst, existing_results
             )
             results.append(result)
             

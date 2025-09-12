@@ -84,44 +84,55 @@ The built container includes:
 - FFmpeg for audio/video processing
 - Multi-step transcriber dependencies
 
-## S3-Based Configuration (v3.0.0+)
+## Simplified S3 Configuration (v4.0.0+)
 
 ### Overview
-Version 3.0.0 simplifies the container to use only S3-based configuration for cloud-native deployments. This eliminates volume mounts entirely and provides seamless integration with orchestrators like Nomad and Kubernetes.
+Version 4.0.0 introduces a major simplification with unified S3 paths and environment-based configuration. All transcription data is organized under a single S3 bucket and prefix structure, with job-specific parameters moved to upload time.
 
-**Breaking Change in v3.0.0**: Legacy file-based configuration has been removed for simplicity and maintainability.
+**Breaking Changes in v4.0.0**:
+- Unified S3 path structure: `s3://<S3_TRANSCRIBER_BUCKET>/<S3_TRANSCRIBER_PREFIX>/<job-uuid>/`
+- Environment-based configuration using `.env` files
+- Transcription parameters moved to job submission instead of environment variables
 
-### Environment Variables
+### S3 Path Structure
 
-**Core Configuration:**
-```bash
-S3_TASKS_BUCKET=my-tasks-bucket
-S3_TASKS_KEY=jobs/abc-123/tasks.json
-S3_RESULTS_BUCKET=my-results-bucket  # Optional, defaults to S3_TASKS_BUCKET
-S3_RESULTS_KEY=jobs/abc-123/results.json
+Each transcription job is organized under a UUID-based directory:
+```
+s3://<S3_TRANSCRIBER_BUCKET>/<S3_TRANSCRIBER_PREFIX>/<job-uuid>/
+├── tasks.json          # Video tasks to process
+├── config.json         # Transcription parameters (optional)
+├── results.json        # Processing results
+├── inputs/             # Downloaded video files
+└── outputs/            # Generated transcripts and metadata
 ```
 
-**AWS Configuration:**
+### Environment Configuration
+
+Create a `.env` file from the template:
 ```bash
+# Copy template and customize
+cp env-template .env
+# Edit .env with your actual values
+```
+
+**Required Configuration (.env):**
+```bash
+# AWS S3 Configuration
+S3_TRANSCRIBER_BUCKET=my-transcriber-bucket
+S3_TRANSCRIBER_PREFIX=jobs
+AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=xxx...
-AWS_REGION=us-east-1
-S3_ENDPOINT=https://s3.custom.com  # Optional for custom S3 endpoints
-```
 
-**Application Configuration:**
-```bash
+# Transcription Service URLs
+OLLAMA_URL=http://ollama.service.consul:11434
 S3_VIDEO_BUCKET=my-videos-bucket
 S3_OUTPUT_BUCKET=my-transcripts-bucket
-S3_PREFIX=processed/
-OLLAMA_URL=http://ollama.service.consul:11434
+
+# Optional
+S3_ENDPOINT_URL=https://s3.custom.com
 HF_TOKEN=hf_xxx...
-WHISPER_MODEL=whisper-turbo
-LLM_MODEL=llama3
-EMBEDDING_MODEL=nomic-embed-text
-MIN_SEGMENT_SIZE=5
-SPEAKER_DIARIZATION=true
-YT_DLP_FORMAT=best
+NOMAD_ADDR=http://nomad.service.consul:4646
 ```
 
 ### Nomad Integration Example
@@ -139,14 +150,17 @@ job "video-transcription" {
     task "main" {
       driver = "docker"
       config {
-        image = "registry.cluster:5000/video-transcription-batch:v3.0.0"
+        image = "registry.cluster:5000/video-transcription-batch:v4.0.0"
       }
 
       env {
-        S3_TASKS_BUCKET   = "transcription-jobs"
-        S3_TASKS_KEY      = "jobs/${JOB_ID}/tasks.json"
-        OLLAMA_URL        = "http://ollama.service.consul:11434"
-        # ... other env vars
+        S3_TRANSCRIBER_BUCKET = "transcription-jobs"
+        S3_TRANSCRIBER_PREFIX = "jobs"
+        S3_JOB_ID            = "${JOB_ID}"
+        S3_VIDEO_BUCKET      = "videos"
+        S3_OUTPUT_BUCKET     = "transcripts"
+        OLLAMA_URL           = "http://ollama.service.consul:11434"
+        AWS_REGION           = "us-east-1"
       }
 
       template {
@@ -180,17 +194,25 @@ The `transcription_client` package provides:
 - Data models for jobs and results
 - Utility functions for video processing
 
-### New S3BatchManager (v2.0.0+)
+### S3BatchManager (v4.0.0+)
 ```python
 from transcription_client import S3BatchManager
 
+# Uses environment variables from .env file
 manager = S3BatchManager(
-    tasks_bucket='my-tasks',
-    results_bucket='my-results'
+    transcriber_bucket='my-transcriber-bucket',
+    transcriber_prefix='jobs'
 )
 
-# Upload tasks and get job ID
-job_id = manager.upload_tasks(video_tasks_list)
+# Upload tasks with transcription config
+job_id = manager.upload_tasks(
+    video_tasks_list,
+    transcription_config={
+        'whisper_model': 'whisper-turbo',
+        'speaker_diarization': True,
+        'min_segment_size': 5
+    }
+)
 
 # Monitor progress
 status = manager.get_job_status(job_id)
@@ -198,23 +220,35 @@ print(f"Progress: {status['progress']:.1%}")
 
 # Download results when complete
 results = manager.download_results(job_id)
+config = manager.download_config(job_id)
 ```
 
 ### Command-Line Tools
 
-**batch-transcribe**: S3-based batch job management
+**batch-transcribe**: S3-based batch job management with environment-based configuration
 ```bash
+# Setup: Copy and customize environment file
+cp env-template .env
+# Edit .env with your S3 and service configuration
+
 # Create tasks file with random UUID filename
 python -m scripts.batch_transcribe create-task
 
 # Create tasks file with custom filename
 python -m scripts.batch_transcribe create-task --output my-videos.json
 
-# Upload tasks to S3
-python -m scripts.batch_transcribe upload my-videos.json --generate-env
+# Upload tasks with transcription parameters
+python -m scripts.batch_transcribe upload my-videos.json \
+  --whisper-model whisper-turbo \
+  --speaker-diarization \
+  --min-segment-size 5 \
+  --generate-env
 
 # Check job status  
 python -m scripts.batch_transcribe status abc-123-def
+
+# View transcription configuration for a job
+python -m scripts.batch_transcribe config abc-123-def
 
 # List all jobs
 python -m scripts.batch_transcribe list

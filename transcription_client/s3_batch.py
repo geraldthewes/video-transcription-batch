@@ -25,8 +25,8 @@ class S3BatchManager:
         aws_secret_access_key: Optional[str] = None,
         aws_region: str = 'us-east-1',
         s3_endpoint: Optional[str] = None,
-        tasks_bucket: Optional[str] = None,
-        results_bucket: Optional[str] = None,
+        transcriber_bucket: Optional[str] = None,
+        transcriber_prefix: str = '',
     ):
         """
         Initialize the S3 batch manager.
@@ -36,13 +36,17 @@ class S3BatchManager:
             aws_secret_access_key: AWS secret key (uses env var if not provided) 
             aws_region: AWS region
             s3_endpoint: Custom S3 endpoint URL (optional)
-            tasks_bucket: S3 bucket for tasks.json files
-            results_bucket: S3 bucket for results.json files (defaults to tasks_bucket)
+            transcriber_bucket: S3 bucket for all transcription data
+            transcriber_prefix: S3 prefix for organizing transcription jobs
         """
         self.aws_region = aws_region
         self.s3_endpoint = s3_endpoint
-        self.tasks_bucket = tasks_bucket or os.getenv('S3_TASKS_BUCKET')
-        self.results_bucket = results_bucket or os.getenv('S3_RESULTS_BUCKET', self.tasks_bucket)
+        self.transcriber_bucket = transcriber_bucket or os.getenv('S3_TRANSCRIBER_BUCKET')
+        self.transcriber_prefix = transcriber_prefix or os.getenv('S3_TRANSCRIBER_PREFIX', '')
+        
+        # Ensure prefix ends with / if not empty
+        if self.transcriber_prefix and not self.transcriber_prefix.endswith('/'):
+            self.transcriber_prefix += '/'
         
         # Setup S3 client
         session = boto3.Session(
@@ -57,16 +61,17 @@ class S3BatchManager:
         
         self.s3_client = session.client('s3', **s3_kwargs)
         
-        if not self.tasks_bucket:
-            raise ValueError("tasks_bucket must be provided or S3_TASKS_BUCKET env var must be set")
+        if not self.transcriber_bucket:
+            raise ValueError("transcriber_bucket must be provided or S3_TRANSCRIBER_BUCKET env var must be set")
     
-    def upload_tasks(self, tasks: List[Dict[str, Any]], job_id: Optional[str] = None) -> str:
+    def upload_tasks(self, tasks: List[Dict[str, Any]], job_id: Optional[str] = None, transcription_config: Optional[Dict[str, Any]] = None) -> str:
         """
         Upload tasks to S3 and return the job ID.
         
         Args:
             tasks: List of task dictionaries (video URL, title, description, etc.)
             job_id: Optional job ID (will generate UUID if not provided)
+            transcription_config: Optional transcription configuration parameters
             
         Returns:
             Job ID for the uploaded tasks
@@ -83,18 +88,30 @@ class S3BatchManager:
                 raise ValueError("Each task must be a dict with 'url' field")
         
         # Upload tasks to S3
-        tasks_key = f"jobs/{job_id}/tasks.json"
+        tasks_key = f"{self.transcriber_prefix}{job_id}/tasks.json"
         
         try:
             tasks_json = json.dumps(tasks, indent=2, ensure_ascii=False)
             self.s3_client.put_object(
-                Bucket=self.tasks_bucket,
+                Bucket=self.transcriber_bucket,
                 Key=tasks_key,
                 Body=tasks_json.encode('utf-8'),
                 ContentType='application/json'
             )
             
-            logger.info(f"Uploaded {len(tasks)} tasks to s3://{self.tasks_bucket}/{tasks_key}")
+            # Upload transcription config if provided
+            if transcription_config:
+                config_key = f"{self.transcriber_prefix}{job_id}/config.json"
+                config_json = json.dumps(transcription_config, indent=2, ensure_ascii=False)
+                self.s3_client.put_object(
+                    Bucket=self.transcriber_bucket,
+                    Key=config_key,
+                    Body=config_json.encode('utf-8'),
+                    ContentType='application/json'
+                )
+                logger.info(f"Uploaded transcription config to s3://{self.transcriber_bucket}/{config_key}")
+            
+            logger.info(f"Uploaded {len(tasks)} tasks to s3://{self.transcriber_bucket}/{tasks_key}")
             return job_id
             
         except Exception as e:
@@ -111,19 +128,19 @@ class S3BatchManager:
         Returns:
             List of task dictionaries
         """
-        tasks_key = f"jobs/{job_id}/tasks.json"
+        tasks_key = f"{self.transcriber_prefix}{job_id}/tasks.json"
         
         try:
-            response = self.s3_client.get_object(Bucket=self.tasks_bucket, Key=tasks_key)
+            response = self.s3_client.get_object(Bucket=self.transcriber_bucket, Key=tasks_key)
             tasks_json = response['Body'].read().decode('utf-8')
             tasks = json.loads(tasks_json)
             
-            logger.info(f"Downloaded {len(tasks)} tasks from s3://{self.tasks_bucket}/{tasks_key}")
+            logger.info(f"Downloaded {len(tasks)} tasks from s3://{self.transcriber_bucket}/{tasks_key}")
             return tasks
             
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
-                raise FileNotFoundError(f"Tasks file not found: s3://{self.tasks_bucket}/{tasks_key}")
+                raise FileNotFoundError(f"Tasks file not found: s3://{self.transcriber_bucket}/{tasks_key}")
             else:
                 logger.error(f"Failed to download tasks: {e}")
                 raise
@@ -141,19 +158,19 @@ class S3BatchManager:
         Returns:
             List of result dictionaries, or None if not found
         """
-        results_key = f"jobs/{job_id}/results.json"
+        results_key = f"{self.transcriber_prefix}{job_id}/results.json"
         
         try:
-            response = self.s3_client.get_object(Bucket=self.results_bucket, Key=results_key)
+            response = self.s3_client.get_object(Bucket=self.transcriber_bucket, Key=results_key)
             results_json = response['Body'].read().decode('utf-8')
             results = json.loads(results_json)
             
-            logger.info(f"Downloaded {len(results)} results from s3://{self.results_bucket}/{results_key}")
+            logger.info(f"Downloaded {len(results)} results from s3://{self.transcriber_bucket}/{results_key}")
             return results
             
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
-                logger.info(f"Results file not found: s3://{self.results_bucket}/{results_key}")
+                logger.info(f"Results file not found: s3://{self.transcriber_bucket}/{results_key}")
                 return None
             else:
                 logger.error(f"Failed to download results: {e}")
@@ -222,15 +239,16 @@ class S3BatchManager:
         """
         try:
             response = self.s3_client.list_objects_v2(
-                Bucket=self.tasks_bucket,
-                Prefix='jobs/',
+                Bucket=self.transcriber_bucket,
+                Prefix=self.transcriber_prefix,
                 Delimiter='/'
             )
             
             job_ids = []
             for prefix in response.get('CommonPrefixes', []):
-                job_path = prefix['Prefix']  # e.g., 'jobs/uuid/
-                job_id = job_path.strip('/').split('/')[-1]
+                job_path = prefix['Prefix']  # e.g., 'prefix/uuid/'
+                # Remove the transcriber_prefix and trailing slash to get job_id
+                job_id = job_path.replace(self.transcriber_prefix, '').strip('/')
                 if job_id:
                     job_ids.append(job_id)
             
@@ -264,10 +282,9 @@ class S3BatchManager:
             Dictionary of environment variables
         """
         env_vars = {
-            'S3_TASKS_BUCKET': self.tasks_bucket,
-            'S3_TASKS_KEY': f'jobs/{job_id}/tasks.json',
-            'S3_RESULTS_BUCKET': self.results_bucket,
-            'S3_RESULTS_KEY': f'jobs/{job_id}/results.json',
+            'S3_TRANSCRIBER_BUCKET': self.transcriber_bucket,
+            'S3_TRANSCRIBER_PREFIX': self.transcriber_prefix,
+            'S3_JOB_ID': job_id,
             'S3_VIDEO_BUCKET': video_bucket,
             'S3_OUTPUT_BUCKET': output_bucket,
             'OLLAMA_URL': ollama_url,
@@ -320,3 +337,34 @@ class S3BatchManager:
         
         logger.info(f"Loaded {len(tasks)} tasks from {file_path}")
         return tasks
+    
+    def download_config(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Download transcription configuration from S3 for a given job ID.
+        
+        Args:
+            job_id: Job ID to download config for
+            
+        Returns:
+            Configuration dictionary, or None if not found
+        """
+        config_key = f"{self.transcriber_prefix}{job_id}/config.json"
+        
+        try:
+            response = self.s3_client.get_object(Bucket=self.transcriber_bucket, Key=config_key)
+            config_json = response['Body'].read().decode('utf-8')
+            config = json.loads(config_json)
+            
+            logger.info(f"Downloaded transcription config from s3://{self.transcriber_bucket}/{config_key}")
+            return config
+            
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                logger.info(f"Config file not found: s3://{self.transcriber_bucket}/{config_key}")
+                return None
+            else:
+                logger.error(f"Failed to download config: {e}")
+                raise
+        except Exception as e:
+            logger.error(f"Failed to parse config JSON: {e}")
+            raise
