@@ -1,10 +1,10 @@
 # Video Transcription Batch Processing
 
-A cloud-native containerized service for batch transcription of YouTube videos using Multi-Step Transcriber (MST). Designed for deployment in orchestrators like Nomad and Kubernetes with S3-based job management.
+A cloud-native containerized service for batch transcription of YouTube videos using Multi-Step Transcriber (MST). Designed for deployment in orchestrators like Nomad and Kubernetes with simplified S3-based job management.
 
 ## Overview
 
-This service processes batches of YouTube videos with high-quality transcription including speaker diarization and topic segmentation. It uses S3-based configuration for cloud-native deployment in orchestrators like Nomad and Kubernetes.
+This service processes batches of YouTube videos with high-quality transcription including speaker diarization and topic segmentation. Version 4.0.0 introduces a major simplification with unified S3 paths and environment-based configuration for easier deployment and management.
 
 ## Key Features
 
@@ -31,89 +31,114 @@ This service processes batches of YouTube videos with high-quality transcription
 # 1. Install the client tools
 pip install -e .
 
-# 2. Create example tasks
-batch-transcribe create-example --output my-videos.json
+# 2. Setup environment configuration
+cp env-template .env
+# Edit .env with your AWS and service configuration
 
-# 3. Upload tasks to S3
-batch-transcribe upload my-videos.json \
-  --generate-env \
-  --video-bucket my-videos \
-  --output-bucket my-transcripts \
-  --ollama-url http://ollama.service.consul:11434
+# 3. Create tasks file
+python -m scripts.batch_transcribe create-task --output my-videos.json
 
-# 4. Run container with environment variables
+# 4. Upload tasks with transcription parameters
+python -m scripts.batch_transcribe upload my-videos.json \
+  --whisper-model whisper-turbo \
+  --speaker-diarization \
+  --min-segment-size 5 \
+  --generate-env
+
+# 5. Run container with simplified environment
 docker run --gpus all \
-  -e S3_TASKS_BUCKET=my-tasks \
-  -e S3_TASKS_KEY=jobs/abc-123/tasks.json \
-  -e S3_RESULTS_BUCKET=my-tasks \
-  -e S3_RESULTS_KEY=jobs/abc-123/results.json \
+  -e S3_TRANSCRIBER_BUCKET=my-transcriber \
+  -e S3_TRANSCRIBER_PREFIX=jobs \
+  -e S3_JOB_ID=abc-123-def \
   -e AWS_ACCESS_KEY_ID=xxx \
   -e AWS_SECRET_ACCESS_KEY=xxx \
   -e S3_VIDEO_BUCKET=my-videos \
   -e S3_OUTPUT_BUCKET=my-transcripts \
   -e OLLAMA_URL=http://ollama:11434 \
-  -e SPEAKER_DIARIZATION=true \
-  registry.cluster:5000/video-transcription-batch:latest
+  registry.cluster:5000/video-transcription-batch:v4.0.0
 ```
 
 ## Configuration
 
-### Environment Variables
+### Environment Configuration (.env file)
 
-**Core Configuration:**
-- `S3_TASKS_BUCKET` - Bucket containing tasks.json
-- `S3_TASKS_KEY` - S3 key for tasks.json (e.g., `jobs/abc-123/tasks.json`)
-- `S3_RESULTS_BUCKET` - Bucket for results.json (defaults to tasks bucket)
-- `S3_RESULTS_KEY` - S3 key for results.json (e.g., `jobs/abc-123/results.json`)
+Version 4.0.0 uses a simplified `.env` file approach:
 
-**AWS Configuration:**
-- `AWS_ACCESS_KEY_ID` - AWS access key
-- `AWS_SECRET_ACCESS_KEY` - AWS secret key
-- `AWS_REGION` - AWS region (default: us-east-1)
-- `S3_ENDPOINT` - Custom S3 endpoint (optional)
+```bash
+# Copy template and customize
+cp env-template .env
+```
 
-**Storage Configuration:**
-- `S3_VIDEO_BUCKET` - Bucket for storing downloaded videos
-- `S3_OUTPUT_BUCKET` - Bucket for storing transcription outputs
-- `S3_PREFIX` - Optional prefix for S3 keys (default: processed/)
+**Required Configuration:**
+```bash
+# S3 Configuration
+S3_TRANSCRIBER_BUCKET=my-transcriber-bucket
+S3_TRANSCRIBER_PREFIX=jobs
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=xxx...
 
-**MST Configuration:**
-- `OLLAMA_URL` - Ollama service URL (required)
-- `HF_TOKEN` - HuggingFace token (optional)
-- `WHISPER_MODEL` - Whisper model (default: whisper-turbo)
-- `LLM_MODEL` - LLM model (default: llama3)
-- `EMBEDDING_MODEL` - Embedding model (default: nomic-embed-text)
-- `MIN_SEGMENT_SIZE` - Minimum segment size (default: 5)
+# Service URLs
+OLLAMA_URL=http://ollama.service.consul:11434
+S3_VIDEO_BUCKET=my-videos-bucket
+S3_OUTPUT_BUCKET=my-transcripts-bucket
+```
 
-**Processing Options:**
-- `SPEAKER_DIARIZATION` - Enable speaker diarization (default: true)
-- `YT_DLP_FORMAT` - yt-dlp format string (default: best)
+**Optional Configuration:**
+```bash
+# Custom S3 endpoint
+S3_ENDPOINT_URL=https://s3.custom.com
+
+# HuggingFace token for models
+HF_TOKEN=hf_xxx...
+
+# Nomad deployment URL
+NOMAD_ADDR=http://nomad.service.consul:4646
+```
+
+### S3 Structure
+
+Each job is organized under a UUID-based directory:
+```
+s3://transcriber-bucket/prefix/job-uuid/
+├── tasks.json          # Video tasks to process
+├── config.json         # Transcription parameters
+├── results.json        # Processing results  
+├── inputs/             # Downloaded videos
+└── outputs/            # Generated transcripts
+```
 
 ## CLI Utilities
 
 ### batch-transcribe
 
-Manage S3-based batch transcription jobs:
+Manage S3-based batch transcription jobs with environment-based configuration:
 
 ```bash
-# Create example tasks file
-batch-transcribe create-example --output my-videos.json
+# Setup environment
+cp env-template .env && nano .env
 
-# Upload tasks to S3
-batch-transcribe upload my-videos.json \
-  --job-id my-job-123 \
-  --generate-env \
-  --video-bucket my-videos \
-  --output-bucket my-transcripts
+# Create tasks file (generates UUID-based filename)
+python -m scripts.batch_transcribe create-task
+
+# Upload tasks with transcription parameters
+python -m scripts.batch_transcribe upload my-videos.json \
+  --whisper-model whisper-turbo \
+  --speaker-diarization \
+  --min-segment-size 5 \
+  --generate-env
 
 # Check job status
-batch-transcribe status my-job-123
+python -m scripts.batch_transcribe status abc-123-def
+
+# View transcription configuration
+python -m scripts.batch_transcribe config abc-123-def
 
 # List all jobs
-batch-transcribe list
+python -m scripts.batch_transcribe list
 
 # Download results
-batch-transcribe download my-job-123 --output results.json
+python -m scripts.batch_transcribe download abc-123-def --output results.json
 ```
 
 ### generate-nomad-job
@@ -134,22 +159,7 @@ This generates a complete Nomad job spec with Vault integration for secrets.
 
 ## Nomad Deployment
 
-### Vault Integration
-
-Store secrets in Vault:
-
-```bash
-# AWS credentials
-vault kv put secret/nomad/jobs/aws-credentials \
-  access_key_id="AKIA..." \
-  secret_access_key="xxx"
-
-# HuggingFace token
-vault kv put secret/nomad/jobs/hf-token \
-  token="hf_xxx"
-```
-
-### Example Nomad Job
+### Example Nomad Job (v4.0.0)
 
 ```hcl
 job "video-transcription" {
@@ -167,25 +177,24 @@ job "video-transcription" {
       driver = "docker"
 
       config {
-        image = "registry.cluster:5000/video-transcription-batch:latest"
+        image = "registry.cluster:5000/video-transcription-batch:v4.0.0"
       }
 
       env {
-        S3_TASKS_BUCKET     = "my-tasks"
-        S3_TASKS_KEY        = "jobs/abc-123/tasks.json"
-        S3_RESULTS_BUCKET   = "my-tasks"
-        S3_RESULTS_KEY      = "jobs/abc-123/results.json"
-        S3_VIDEO_BUCKET     = "my-videos"
-        S3_OUTPUT_BUCKET    = "my-transcripts"
-        OLLAMA_URL          = "http://ollama.service.consul:11434"
-        SPEAKER_DIARIZATION = "true"
+        S3_TRANSCRIBER_BUCKET = "transcription-jobs"
+        S3_TRANSCRIBER_PREFIX = "jobs"
+        S3_JOB_ID            = "${JOB_ID}"
+        S3_VIDEO_BUCKET      = "videos"
+        S3_OUTPUT_BUCKET     = "transcripts"
+        OLLAMA_URL           = "http://ollama.service.consul:11434"
+        AWS_REGION           = "us-east-1"
       }
 
       template {
         data = <<EOF
-{{ with secret "secret/nomad/jobs/aws-credentials" }}
-AWS_ACCESS_KEY_ID = "{{ .Data.data.access_key_id }}"
-AWS_SECRET_ACCESS_KEY = "{{ .Data.data.secret_access_key }}"
+{{ with secret "secret/aws/transcription" }}
+AWS_ACCESS_KEY_ID="{{ .Data.data.access_key }}"
+AWS_SECRET_ACCESS_KEY="{{ .Data.data.secret_key }}"
 {{ end }}
 EOF
         destination = "secrets/aws.env"
@@ -207,18 +216,18 @@ EOF
 
 ## Python API
 
-Use the S3BatchManager programmatically:
+Use the S3BatchManager programmatically with v4.0.0:
 
 ```python
 from transcription_client import S3BatchManager
 
-# Initialize manager
+# Initialize manager (uses environment variables from .env)
 manager = S3BatchManager(
-    tasks_bucket='my-tasks',
-    results_bucket='my-results'
+    transcriber_bucket='my-transcriber-bucket',
+    transcriber_prefix='jobs'
 )
 
-# Upload tasks
+# Upload tasks with transcription configuration
 tasks = [
     {
         "url": "https://youtu.be/VlaGzSLsJ_0",
@@ -226,15 +235,23 @@ tasks = [
         "description": "Example description"
     }
 ]
-job_id = manager.upload_tasks(tasks)
+job_id = manager.upload_tasks(
+    tasks,
+    transcription_config={
+        'whisper_model': 'whisper-turbo',
+        'speaker_diarization': True,
+        'min_segment_size': 5
+    }
+)
 
 # Check status
 status = manager.get_job_status(job_id)
 print(f"Progress: {status['progress']:.1%}")
 
-# Download results when complete
+# Download results and config when complete
 if status['status'] == 'completed':
     results = manager.download_results(job_id)
+    config = manager.download_config(job_id)
 ```
 
 ## File Formats
@@ -270,17 +287,20 @@ if status['status'] == 'completed':
 
 ## Output Structure
 
-### S3 Storage Layout
+### S3 Storage Layout (v4.0.0)
 
-**Videos:**
+**Job Directory:**
 ```
-s3://{video_bucket}/{prefix}/{channel}/{video_id}/{video_id}.mp4
-```
-
-**Transcripts:**
-```
-s3://{output_bucket}/{prefix}/{channel}/{video_id}/{video_id}_transcript.md
-s3://{output_bucket}/{prefix}/{channel}/{video_id}/{video_id}_transcript.json
+s3://transcriber-bucket/prefix/job-uuid/
+├── tasks.json          # Input video tasks
+├── config.json         # Transcription parameters  
+├── results.json        # Processing results
+├── inputs/             # Downloaded videos
+│   └── {channel}/{video_id}/{video_id}.mp4
+└── outputs/            # Generated transcripts
+    └── {channel}/{video_id}/
+        ├── {video_id}_transcript.md
+        └── {video_id}_transcript.json
 ```
 
 ### Transcript Formats
@@ -303,7 +323,7 @@ The container is built automatically using the Nomad MCP Builder service:
 
 ```bash
 # Trigger build (handled automatically on git push)
-# Latest build: registry.cluster:5000/video-transcription-batch:v2.0.0
+# Latest build: registry.cluster:5000/video-transcription-batch:v4.0.0
 ```
 
 ### Local Development
