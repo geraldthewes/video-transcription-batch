@@ -59,6 +59,7 @@ def create_manager_from_env(aws_profile: Optional[str] = None) -> S3BatchManager
 
 def upload_tasks(args):
     """Upload tasks from a JSON file to S3."""
+    logger.info(f"Using AWS profile: {args.profile}")
     manager = create_manager_from_env(aws_profile=args.profile)
     
     # Load tasks from file
@@ -251,7 +252,6 @@ Examples:
     
     # Configuration
     parser.add_argument('--env-file', default='.env', help='Environment file to load (default: .env)')
-    parser.add_argument('--profile', help='AWS profile name for credentials (uses ~/.aws/credentials)')
     
     subparsers = parser.add_subparsers(dest='command', help='Commands')
     
@@ -259,6 +259,7 @@ Examples:
     upload_parser = subparsers.add_parser('upload', help='Upload tasks to S3')
     upload_parser.add_argument('tasks_file', help='Path to tasks.json file')
     upload_parser.add_argument('--job-id', help='Custom job ID (generates UUID if not provided)')
+    upload_parser.add_argument('--profile', help='AWS profile name for credentials (uses ~/.aws/credentials)')
     upload_parser.add_argument('--generate-env', action='store_true', 
                               help='Generate Nomad environment variables')
     upload_parser.add_argument('--ollama-url', help='Ollama service URL (for --generate-env)')
@@ -276,18 +277,22 @@ Examples:
     # Status command
     status_parser = subparsers.add_parser('status', help='Check job status')
     status_parser.add_argument('job_id', help='Job ID to check')
+    status_parser.add_argument('--profile', help='AWS profile name for credentials (uses ~/.aws/credentials)')
     
     # List command
     list_parser = subparsers.add_parser('list', help='List all jobs')
+    list_parser.add_argument('--profile', help='AWS profile name for credentials (uses ~/.aws/credentials)')
     
     # Download command
     download_parser = subparsers.add_parser('download', help='Download results')
     download_parser.add_argument('job_id', help='Job ID to download results for')
     download_parser.add_argument('--output', help='Output file path (default: results-{job_id}.json)')
+    download_parser.add_argument('--profile', help='AWS profile name for credentials (uses ~/.aws/credentials)')
     
     # Config command
     config_parser = subparsers.add_parser('config', help='View transcription configuration for a job')
     config_parser.add_argument('job_id', help='Job ID to view config for')
+    config_parser.add_argument('--profile', help='AWS profile name for credentials (uses ~/.aws/credentials)')
     
     # Create task command
     task_parser = subparsers.add_parser('create-task', help='Create tasks.json file with example content')
