@@ -4,7 +4,7 @@ A cloud-native containerized service for batch transcription of YouTube videos u
 
 ## Overview
 
-This service processes batches of YouTube videos with high-quality transcription including speaker diarization and topic segmentation. It supports both traditional file-based configuration (for local development) and modern S3-based configuration (for production orchestration).
+This service processes batches of YouTube videos with high-quality transcription including speaker diarization and topic segmentation. It uses S3-based configuration for cloud-native deployment in orchestrators like Nomad and Kubernetes.
 
 ## Key Features
 
@@ -19,11 +19,6 @@ This service processes batches of YouTube videos with high-quality transcription
 
 ## Architecture
 
-### Two Configuration Modes
-
-1. **Legacy Mode** (file-based): Mount 3 JSON files for local development
-2. **S3 Mode** (environment-based): Use environment variables + S3 for production
-
 ### Components
 
 - **Docker Container**: Transcription service with CUDA/AI libraries
@@ -31,8 +26,6 @@ This service processes batches of YouTube videos with high-quality transcription
 - **CLI Tools**: Batch job management and Nomad integration utilities
 
 ## Quick Start
-
-### Option 1: S3 Mode (Recommended for Production)
 
 ```bash
 # 1. Install the client tools
@@ -50,7 +43,6 @@ batch-transcribe upload my-videos.json \
 
 # 4. Run container with environment variables
 docker run --gpus all \
-  -e USE_S3_CONFIG=true \
   -e S3_TASKS_BUCKET=my-tasks \
   -e S3_TASKS_KEY=jobs/abc-123/tasks.json \
   -e S3_RESULTS_BUCKET=my-tasks \
@@ -64,29 +56,11 @@ docker run --gpus all \
   registry.cluster:5000/video-transcription-batch:latest
 ```
 
-### Option 2: Legacy Mode (Local Development)
-
-```bash
-# 1. Prepare configuration files
-cp config/config.example.json my-config.json
-cp config/tasks.example.json my-tasks.json
-# Edit files with your settings
-
-# 2. Run container with volume mounts
-docker run --gpus all \
-  --env SPEAKER_DIARIZATION=true \
-  -v $(pwd)/my-config.json:/app/config.json \
-  -v $(pwd)/my-tasks.json:/app/tasks.json \
-  -v $(pwd)/results.json:/app/results.json \
-  registry.cluster:5000/video-transcription-batch:latest
-```
-
-## S3 Mode Configuration
+## Configuration
 
 ### Environment Variables
 
 **Core Configuration:**
-- `USE_S3_CONFIG=true` - Enable S3 mode
 - `S3_TASKS_BUCKET` - Bucket containing tasks.json
 - `S3_TASKS_KEY` - S3 key for tasks.json (e.g., `jobs/abc-123/tasks.json`)
 - `S3_RESULTS_BUCKET` - Bucket for results.json (defaults to tasks bucket)
@@ -197,7 +171,6 @@ job "video-transcription" {
       }
 
       env {
-        USE_S3_CONFIG       = "true"
         S3_TASKS_BUCKET     = "my-tasks"
         S3_TASKS_KEY        = "jobs/abc-123/tasks.json"
         S3_RESULTS_BUCKET   = "my-tasks"
@@ -346,12 +319,6 @@ pytest
 docker build -f docker/Dockerfile -t video-transcription-batch .
 ```
 
-## Migration from Legacy Mode
-
-1. **Extract Configuration**: Convert config.json to environment variables
-2. **Upload Tasks**: Use `batch-transcribe upload` to move tasks.json to S3
-3. **Update Deployment**: Switch to S3 mode with `USE_S3_CONFIG=true`
-4. **Remove Volumes**: No more volume mounts needed
 
 ## Support
 

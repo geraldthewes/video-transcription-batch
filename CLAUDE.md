@@ -66,13 +66,14 @@ Use the MCP build service tools (available in Claude sessions after MCP server i
 - Rootless Buildah for secure builds
 
 ### Build Status
-✅ **Latest Build**: Job `ae47464b-5c50-460f-b79f-357bcc6de589` completed successfully on 2025-09-12
-- All 15 Docker build steps completed
-- Image successfully tagged as `latest` and `v2.0.0` 
-- Published to `registry.cluster:5000`
-- **Major Update**: Added S3-based configuration support for cloud-native deployments
+✅ **Latest Build**: Job `399b9a73-084e-4352-a5d0-76ea9a8c7c83` (in progress) - v3.0.0
+- **Breaking Change**: Simplified to S3-only configuration (removed legacy file-based support)
+- Zero volume deployment ready for production orchestrators
+- Image: `registry.cluster:5000/video-transcription-batch:v3.0.0`
 
-✅ **Previous Build**: Job `71487294-1af4-416e-8bf0-febf3133af43` (v1.0.0) - Initial working version
+✅ **Previous Builds**: 
+- Job `ae47464b-5c50-460f-b79f-357bcc6de589` (v2.0.0) - Added S3-based configuration  
+- Job `71487294-1af4-416e-8bf0-febf3133af43` (v1.0.0) - Initial working version
 
 ### Container Contents
 The built container includes:
@@ -82,29 +83,17 @@ The built container includes:
 - FFmpeg for audio/video processing
 - Multi-step transcriber dependencies
 
-## S3-Based Configuration (v2.0.0+)
+## S3-Based Configuration (v3.0.0+)
 
 ### Overview
-Version 2.0.0 introduces S3-based configuration for cloud-native deployments. This eliminates the need for volume mounts and enables seamless integration with orchestrators like Nomad and Kubernetes.
+Version 3.0.0 simplifies the container to use only S3-based configuration for cloud-native deployments. This eliminates volume mounts entirely and provides seamless integration with orchestrators like Nomad and Kubernetes.
 
-### Configuration Modes
-The container supports two modes:
+**Breaking Change in v3.0.0**: Legacy file-based configuration has been removed for simplicity and maintainability.
 
-1. **Legacy Mode** (`USE_S3_CONFIG=false`, default for backward compatibility):
-   - Requires 3 volume mounts: `/app/config.json`, `/app/tasks.json`, `/app/results.json`
-   - Suitable for local development and testing
-
-2. **S3 Mode** (`USE_S3_CONFIG=true`):
-   - Zero volume mounts required
-   - Configuration via environment variables
-   - Tasks and results stored in S3
-   - Ideal for production orchestrator deployments
-
-### S3 Mode Environment Variables
+### Environment Variables
 
 **Core Configuration:**
 ```bash
-USE_S3_CONFIG=true
 S3_TASKS_BUCKET=my-tasks-bucket
 S3_TASKS_KEY=jobs/abc-123/tasks.json
 S3_RESULTS_BUCKET=my-results-bucket  # Optional, defaults to S3_TASKS_BUCKET
@@ -149,11 +138,10 @@ job "video-transcription" {
     task "main" {
       driver = "docker"
       config {
-        image = "registry.cluster:5000/video-transcription-batch:v2.0.0"
+        image = "registry.cluster:5000/video-transcription-batch:v3.0.0"
       }
 
       env {
-        USE_S3_CONFIG     = "true"
         S3_TASKS_BUCKET   = "transcription-jobs"
         S3_TASKS_KEY      = "jobs/${JOB_ID}/tasks.json"
         OLLAMA_URL        = "http://ollama.service.consul:11434"
