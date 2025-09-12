@@ -11,6 +11,7 @@ OLLAMA_URL=<your-ollama-url>
 
 # Optional: Deployment Configuration
 NOMAD_ADDR=<your-nomad-addr>
+NOMAD_DATACENTER=<your-nomad-datacenter>
 VAULT_ADDR=<your-vault-addr>
 
 # NOTE: Secrets (AWS credentials, HF tokens) are handled by Vault in production

@@ -7,7 +7,9 @@ import argparse
 import json
 import logging
 import os
+import subprocess
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -16,6 +18,11 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from transcription_client.s3_batch import S3BatchManager
+
+try:
+    import nomad
+except ImportError:
+    nomad = None
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -217,6 +224,104 @@ def create_tasks(args):
     print(f"   python -m scripts.batch_transcribe upload {output_path}")
 
 
+def submit_job(args):
+    """Submit a transcription job to Nomad."""
+    if nomad is None:
+        logger.error("python-nomad package not installed. Install with: pip install python-nomad")
+        sys.exit(1)
+    
+    manager = create_manager_from_env(aws_profile=args.profile)
+    
+    # Check if job exists in S3
+    try:
+        tasks = manager.download_tasks(args.job_id)
+        config = manager.download_config(args.job_id) or {}
+        logger.info(f"Found job {args.job_id} with {len(tasks)} tasks")
+    except Exception as e:
+        logger.error(f"Job {args.job_id} not found in S3: {e}")
+        sys.exit(1)
+    
+    # Create Nomad client
+    nomad_addr = args.nomad_addr or os.getenv('NOMAD_ADDR', 'http://localhost:4646')
+    nomad_client = nomad.Nomad(host=nomad_addr.replace('http://', '').replace('https://', ''))
+    
+    # Create Nomad job specification
+    job_name = f"video-transcription-{args.job_id}"
+    docker_image = args.docker_image or "registry.cluster:5000/video-transcription-batch:v4.0.0"
+    datacenter = args.datacenter or os.getenv('NOMAD_DATACENTER', 'dc1')
+    
+    job_spec = {
+        "Job": {
+            "ID": job_name,
+            "Name": job_name,
+            "Type": "batch",
+            "Datacenters": [datacenter],
+            "Vault": {
+                "Policies": ["transcription-policy"]
+            },
+            "TaskGroups": [{
+                "Name": "transcriber",
+                "Count": 1,
+                "Tasks": [{
+                    "Name": "main",
+                    "Driver": "docker",
+                    "Config": {
+                        "image": docker_image
+                    },
+                    "Env": {
+                        "S3_TRANSCRIBER_BUCKET": manager.transcriber_bucket,
+                        "S3_TRANSCRIBER_PREFIX": manager.transcriber_prefix,
+                        "S3_JOB_ID": args.job_id,
+                        "AWS_REGION": manager.aws_region,
+                        "OLLAMA_URL": args.ollama_url or os.getenv('OLLAMA_URL', 'http://ollama:11434')
+                    },
+                    "Templates": [{
+                        "DestPath": "secrets/aws.env",
+                        "EmbeddedTmpl": "{{ with secret \"secret/aws/transcription\" }}AWS_ACCESS_KEY_ID=\"{{ .Data.data.access_key }}\"\\nAWS_SECRET_ACCESS_KEY=\"{{ .Data.data.secret_key }}\"{{ end }}\\n{{ with secret \"secret/hf/transcription\" }}HF_TOKEN=\"{{ .Data.data.token }}\"{{ end }}",
+                        "Envvars": True
+                    }],
+                    "Resources": {
+                        "CPU": 2000,
+                        "MemoryMB": 4096,
+                        "Devices": [{
+                            "Name": "nvidia/gpu",
+                            "Count": 1
+                        }]
+                    }
+                }]
+            }]
+        }
+    }
+    
+    # Add S3 endpoint if specified
+    if manager.s3_endpoint:
+        job_spec["Job"]["TaskGroups"][0]["Tasks"][0]["Env"]["S3_ENDPOINT"] = manager.s3_endpoint
+    
+    try:
+        # Submit job to Nomad
+        logger.info(f"Submitting job {job_name} to Nomad at {nomad_addr}")
+        result = nomad_client.jobs.register_job(job_spec)
+        
+        if result.get("EvalID"):
+            print(f"✅ Job submitted successfully!")
+            print(f"📋 Job ID: {job_name}")
+            print(f"🔍 Evaluation ID: {result['EvalID']}")
+            print(f"🌐 Nomad UI: {nomad_addr}/ui/jobs/{job_name}")
+            
+            # Show task info
+            print(f"📊 Processing {len(tasks)} video(s)")
+            for task in tasks:
+                print(f"   • {task.get('title', task['url'])}")
+                
+        else:
+            logger.error(f"Job submission failed: {result}")
+            sys.exit(1)
+            
+    except Exception as e:
+        logger.error(f"Failed to submit job to Nomad: {e}")
+        sys.exit(1)
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -247,6 +352,9 @@ Examples:
 
   # Download results
   python -m scripts.batch_transcribe download abc-123-def --output results.json --profile my-aws-profile
+  
+  # Submit job to Nomad for processing
+  python -m scripts.batch_transcribe submit abc-123-def --profile my-aws-profile
         """
     )
     
@@ -298,6 +406,18 @@ Examples:
     task_parser = subparsers.add_parser('create-task', help='Create tasks.json file with example content')
     task_parser.add_argument('--output', help='Output file path (default: <uuid>.json)')
     
+    # Submit command
+    submit_parser = subparsers.add_parser('submit', help='Submit job to Nomad for processing')
+    submit_parser.add_argument('job_id', help='Job ID to submit to Nomad')
+    submit_parser.add_argument('--profile', help='AWS profile name for credentials (uses ~/.aws/credentials)')
+    submit_parser.add_argument('--nomad-addr', help='Nomad address (overrides NOMAD_ADDR env var)')
+    submit_parser.add_argument('--docker-image', help='Docker image to use (default: registry.cluster:5000/video-transcription-batch:v4.0.0)')
+    submit_parser.add_argument('--ollama-url', help='Ollama service URL (overrides OLLAMA_URL env var)')
+    submit_parser.add_argument('--no-gpu', action='store_true', help='Submit job without GPU requirement (for testing)')
+    submit_parser.add_argument('--datacenter', help='Nomad datacenter (overrides NOMAD_DATACENTER env var, default: dc1)')
+    submit_parser.add_argument('--cpu', type=int, default=2000, help='CPU allocation in MHz (default: 2000)')
+    submit_parser.add_argument('--memory', type=int, default=4096, help='Memory allocation in MB (default: 4096)')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -320,6 +440,8 @@ Examples:
             view_config(args)
         elif args.command == 'create-task':
             create_tasks(args)
+        elif args.command == 'submit':
+            submit_job(args)
             
     except Exception as e:
         logger.error(f"Command failed: {e}")
