@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import sys
+import uuid
 from pathlib import Path
 
 # Add the parent directory to Python path to import transcription_client
@@ -130,8 +131,8 @@ def download_results(args):
     print(f"✅ Downloaded {len(results)} results to {output_path}")
 
 
-def create_example_tasks(args):
-    """Create an example tasks.json file."""
+def create_tasks(args):
+    """Create a tasks.json file with example content."""
     example_tasks = [
         {
             "url": "https://youtu.be/VlaGzSLsJ_0",
@@ -147,14 +148,20 @@ def create_example_tasks(args):
         }
     ]
     
-    output_path = args.output or "example-tasks.json"
+    # Generate UUID-based filename if no output specified
+    if args.output:
+        output_path = args.output
+    else:
+        task_uuid = str(uuid.uuid4())
+        output_path = f"{task_uuid}.json"
+        print(f"📋 Generated task UUID: {task_uuid}")
     
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(example_tasks, f, indent=2, ensure_ascii=False)
     
-    print(f"✅ Created example tasks file: {output_path}")
+    print(f"✅ Created tasks file: {output_path}")
     print("📝 Edit this file with your actual video URLs and upload with:")
-    print(f"   batch-transcribe upload {output_path}")
+    print(f"   python -m scripts.batch_transcribe upload {output_path}")
 
 
 def main():
@@ -164,22 +171,22 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Create example tasks file
-  batch-transcribe create-example --output my-videos.json
+  # Create tasks file
+  python -m scripts.batch_transcribe create-task --output my-videos.json
 
   # Upload tasks and get Nomad environment variables  
-  batch-transcribe upload my-videos.json --generate-env \\
+  python -m scripts.batch_transcribe upload my-videos.json --generate-env \\
     --video-bucket my-videos --output-bucket my-transcripts \\
     --ollama-url http://ollama.example.com:11434
 
   # Check job status
-  batch-transcribe status abc-123-def
+  python -m scripts.batch_transcribe status abc-123-def
 
   # List all jobs
-  batch-transcribe list
+  python -m scripts.batch_transcribe list
 
   # Download results
-  batch-transcribe download abc-123-def --output results.json
+  python -m scripts.batch_transcribe download abc-123-def --output results.json
         """
     )
     
@@ -214,9 +221,9 @@ Examples:
     download_parser.add_argument('job_id', help='Job ID to download results for')
     download_parser.add_argument('--output', help='Output file path (default: results-{job_id}.json)')
     
-    # Create example command
-    example_parser = subparsers.add_parser('create-example', help='Create example tasks.json file')
-    example_parser.add_argument('--output', help='Output file path (default: example-tasks.json)')
+    # Create task command
+    task_parser = subparsers.add_parser('create-task', help='Create tasks.json file with example content')
+    task_parser.add_argument('--output', help='Output file path (default: <uuid>.json)')
     
     args = parser.parse_args()
     
@@ -233,8 +240,8 @@ Examples:
             list_jobs(args)
         elif args.command == 'download':
             download_results(args)
-        elif args.command == 'create-example':
-            create_example_tasks(args)
+        elif args.command == 'create-task':
+            create_tasks(args)
             
     except Exception as e:
         logger.error(f"Command failed: {e}")

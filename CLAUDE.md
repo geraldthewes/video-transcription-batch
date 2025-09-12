@@ -204,20 +204,23 @@ results = manager.download_results(job_id)
 
 **batch-transcribe**: S3-based batch job management
 ```bash
-# Create example tasks
-batch-transcribe create-example --output my-videos.json
+# Create tasks file with random UUID filename
+python -m scripts.batch_transcribe create-task
+
+# Create tasks file with custom filename
+python -m scripts.batch_transcribe create-task --output my-videos.json
 
 # Upload tasks to S3
-batch-transcribe upload my-videos.json --generate-env
+python -m scripts.batch_transcribe upload my-videos.json --generate-env
 
 # Check job status  
-batch-transcribe status abc-123-def
+python -m scripts.batch_transcribe status abc-123-def
 
 # List all jobs
-batch-transcribe list
+python -m scripts.batch_transcribe list
 
 # Download results
-batch-transcribe download abc-123-def --output results.json
+python -m scripts.batch_transcribe download abc-123-def --output results.json
 ```
 
 **generate-nomad-job**: Generate Nomad HCL job specifications
