@@ -10,6 +10,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
+from typing import Optional
 
 # Add the parent directory to Python path to import transcription_client
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -45,10 +46,11 @@ def load_env_file(env_file: str = '.env'):
     logger.info(f"Loaded environment variables from {env_file}")
 
 
-def create_manager_from_env() -> S3BatchManager:
+def create_manager_from_env(aws_profile: Optional[str] = None) -> S3BatchManager:
     """Create S3BatchManager using environment variables."""
     return S3BatchManager(
         aws_region=os.getenv('AWS_REGION', 'us-east-1'),
+        aws_profile=aws_profile,
         s3_endpoint=os.getenv('S3_ENDPOINT_URL'),
         transcriber_bucket=os.getenv('S3_TRANSCRIBER_BUCKET'),
         transcriber_prefix=os.getenv('S3_TRANSCRIBER_PREFIX', ''),
@@ -57,7 +59,7 @@ def create_manager_from_env() -> S3BatchManager:
 
 def upload_tasks(args):
     """Upload tasks from a JSON file to S3."""
-    manager = create_manager_from_env()
+    manager = create_manager_from_env(aws_profile=args.profile)
     
     # Load tasks from file
     tasks = manager.load_tasks_file(args.tasks_file)
@@ -106,7 +108,7 @@ def upload_tasks(args):
 
 def status(args):
     """Check the status of a transcription job."""
-    manager = create_manager_from_env()
+    manager = create_manager_from_env(aws_profile=args.profile)
     
     status_info = manager.get_job_status(args.job_id)
     
@@ -123,7 +125,7 @@ def status(args):
 
 def list_jobs(args):
     """List all transcription jobs."""
-    manager = create_manager_from_env()
+    manager = create_manager_from_env(aws_profile=args.profile)
     
     job_ids = manager.list_jobs()
     
@@ -148,7 +150,7 @@ def list_jobs(args):
 
 def download_results(args):
     """Download results from S3 to a local file."""
-    manager = create_manager_from_env()
+    manager = create_manager_from_env(aws_profile=args.profile)
     
     results = manager.download_results(args.job_id)
     
@@ -167,7 +169,7 @@ def download_results(args):
 
 def view_config(args):
     """View transcription configuration for a job."""
-    manager = create_manager_from_env()
+    manager = create_manager_from_env(aws_profile=args.profile)
     
     config = manager.download_config(args.job_id)
     
@@ -227,28 +229,29 @@ Examples:
   # Create tasks file
   python -m scripts.batch_transcribe create-task --output my-videos.json
 
-  # Upload tasks with transcription parameters
+  # Upload tasks with transcription parameters (with AWS profile)
   python -m scripts.batch_transcribe upload my-videos.json \\
-    --whisper-model whisper-turbo --speaker-diarization \\
+    --profile my-aws-profile --whisper-model whisper-turbo --speaker-diarization \\
     --min-segment-size 5 --generate-env \\
     --ollama-url http://ollama.service.consul:11434
 
   # Check job status
-  python -m scripts.batch_transcribe status abc-123-def
+  python -m scripts.batch_transcribe status abc-123-def --profile my-aws-profile
   
   # View transcription configuration
-  python -m scripts.batch_transcribe config abc-123-def
+  python -m scripts.batch_transcribe config abc-123-def --profile my-aws-profile
 
   # List all jobs
-  python -m scripts.batch_transcribe list
+  python -m scripts.batch_transcribe list --profile my-aws-profile
 
   # Download results
-  python -m scripts.batch_transcribe download abc-123-def --output results.json
+  python -m scripts.batch_transcribe download abc-123-def --output results.json --profile my-aws-profile
         """
     )
     
     # Configuration
     parser.add_argument('--env-file', default='.env', help='Environment file to load (default: .env)')
+    parser.add_argument('--profile', help='AWS profile name for credentials (uses ~/.aws/credentials)')
     
     subparsers = parser.add_subparsers(dest='command', help='Commands')
     

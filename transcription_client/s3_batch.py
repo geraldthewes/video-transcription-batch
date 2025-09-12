@@ -24,6 +24,7 @@ class S3BatchManager:
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
         aws_region: str = 'us-east-1',
+        aws_profile: Optional[str] = None,
         s3_endpoint: Optional[str] = None,
         transcriber_bucket: Optional[str] = None,
         transcriber_prefix: str = '',
@@ -35,6 +36,7 @@ class S3BatchManager:
             aws_access_key_id: AWS access key (uses env var if not provided)
             aws_secret_access_key: AWS secret key (uses env var if not provided) 
             aws_region: AWS region
+            aws_profile: AWS profile name for credentials (uses ~/.aws/credentials)
             s3_endpoint: Custom S3 endpoint URL (optional)
             transcriber_bucket: S3 bucket for all transcription data
             transcriber_prefix: S3 prefix for organizing transcription jobs
@@ -49,11 +51,18 @@ class S3BatchManager:
             self.transcriber_prefix += '/'
         
         # Setup S3 client
-        session = boto3.Session(
-            aws_access_key_id=aws_access_key_id or os.getenv('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=aws_secret_access_key or os.getenv('AWS_SECRET_ACCESS_KEY'),
-            region_name=aws_region
-        )
+        session_kwargs = {
+            'region_name': aws_region
+        }
+        
+        # Use profile if specified, otherwise use explicit credentials or env vars
+        if aws_profile:
+            session_kwargs['profile_name'] = aws_profile
+        else:
+            session_kwargs['aws_access_key_id'] = aws_access_key_id or os.getenv('AWS_ACCESS_KEY_ID')
+            session_kwargs['aws_secret_access_key'] = aws_secret_access_key or os.getenv('AWS_SECRET_ACCESS_KEY')
+        
+        session = boto3.Session(**session_kwargs)
         
         s3_kwargs = {}
         if s3_endpoint:
