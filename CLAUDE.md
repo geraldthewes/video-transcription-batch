@@ -66,13 +66,15 @@ Use the MCP build service tools (available in Claude sessions after MCP server i
 - Rootless Buildah for secure builds
 
 ### Build Status
-✅ **Latest Build**: Job `399b9a73-084e-4352-a5d0-76ea9a8c7c83` completed successfully on 2025-09-12 - v3.0.0
-- **Breaking Change**: Simplified to S3-only configuration (removed legacy file-based support)
-- Zero volume deployment ready for production orchestrators  
-- All 15 Docker build steps completed with cached layers (fast build)
-- Image: `registry.cluster:5000/video-transcription-batch:v3.0.0`
+🔄 **In Progress**: Job `278de965-6153-4e0e-9008-c1363d612362` - v4.0.0 (PUBLISHING phase)
+- **Major Refactor**: Unified S3 structure and environment-based configuration
+- Simplified transcriber bucket with organized job directories
+- Removed legacy video/output bucket separation
+- Added config.json support for per-job transcription parameters
+- Container environment variable simplification
 
 ✅ **Previous Builds**: 
+- Job `399b9a73-084e-4352-a5d0-76ea9a8c7c83` (v3.0.0) - S3-only configuration
 - Job `ae47464b-5c50-460f-b79f-357bcc6de589` (v2.0.0) - Added S3-based configuration  
 - Job `71487294-1af4-416e-8bf0-febf3133af43` (v1.0.0) - Initial working version
 
@@ -310,5 +312,15 @@ Copy example config files from `config/` directory and customize for your enviro
 - Container environment variable changes
 - Version updates and breaking changes
 - New features or removed functionality
+
+### Container Build Requirements
+- **ALWAYS trigger a new container build** when making changes that affect the Docker container:
+  - Changes to `docker/app/main.py` (container application code)
+  - Changes to `docker/Dockerfile` or `docker/requirements.txt`
+  - Environment variable handling changes in the container
+  - New transcription configuration features
+- **Monitor build progress** and update CLAUDE.md with successful build status
+- Use the MCP build service to ensure consistency and proper tagging
+- Update version references in documentation after successful builds
 
 This ensures users always have accurate, up-to-date information regardless of which documentation file they reference.
