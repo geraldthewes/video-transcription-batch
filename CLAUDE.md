@@ -286,3 +286,30 @@ result = client.get_result(job.id)
 
 ## Configuration
 Copy example config files from `config/` directory and customize for your environment.
+
+---
+
+## Documentation Maintenance Guidelines
+
+**IMPORTANT**: When making significant changes to this project:
+
+### Documentation Synchronization
+- **ALWAYS update both CLAUDE.md AND README.md** when making structural, configuration, or API changes
+- README.md serves as the primary user-facing documentation and must stay in sync with CLAUDE.md
+- Both files should accurately reflect the current version, capabilities, and usage patterns
+- Version numbers, examples, and configuration instructions must be consistent across both files
+
+### Commit Guidelines
+- When committing changes that affect functionality, **ensure both documentation files are updated**
+- Include documentation updates in the same commit or immediately follow up with a documentation commit
+- Never leave documentation in an inconsistent state between files
+
+### What Requires Documentation Updates
+- Configuration structure changes (environment variables, S3 paths, etc.)
+- CLI command changes (new commands, changed syntax, new parameters)
+- API interface changes (new methods, changed signatures)
+- Container environment variable changes
+- Version updates and breaking changes
+- New features or removed functionality
+
+This ensures users always have accurate, up-to-date information regardless of which documentation file they reference.
