@@ -119,22 +119,35 @@ cp env-template .env
 
 **Required Configuration (.env):**
 ```bash
-# AWS S3 Configuration
+# AWS S3 Configuration (for client tools only)
 S3_TRANSCRIBER_BUCKET=my-transcriber-bucket
 S3_TRANSCRIBER_PREFIX=jobs
 AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=AKIA...
-AWS_SECRET_ACCESS_KEY=xxx...
 
 # Transcription Service URLs
 OLLAMA_URL=http://ollama.service.consul:11434
-S3_VIDEO_BUCKET=my-videos-bucket
-S3_OUTPUT_BUCKET=my-transcripts-bucket
 
-# Optional
+# Optional: Deployment Configuration
 S3_ENDPOINT_URL=https://s3.custom.com
-HF_TOKEN=hf_xxx...
 NOMAD_ADDR=http://nomad.service.consul:4646
+VAULT_ADDR=https://vault.service.consul:8200
+
+# NOTE: Secrets (AWS credentials, HF tokens) are handled by Vault in production
+```
+
+### Vault Setup
+
+Store secrets in Vault for secure deployment:
+
+```bash
+# AWS credentials for S3 access
+vault kv put secret/aws/transcription \
+  access_key="AKIA..." \
+  secret_key="xxx..."
+
+# Optional: HuggingFace token for model access
+vault kv put secret/hf/transcription \
+  token="hf_xxx..."
 ```
 
 ### Nomad Integration Example
@@ -169,8 +182,11 @@ job "video-transcription" {
 AWS_ACCESS_KEY_ID="{{ .Data.data.access_key }}"
 AWS_SECRET_ACCESS_KEY="{{ .Data.data.secret_key }}"
 {{ end }}
+{{ with secret "secret/hf/transcription" }}
+HF_TOKEN="{{ .Data.data.token }}"
+{{ end }}
 EOF
-        destination = "secrets/aws.env"
+        destination = "secrets/app.env"
         env         = true
       }
 

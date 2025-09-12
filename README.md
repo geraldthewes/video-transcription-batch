@@ -156,6 +156,21 @@ This generates a complete Nomad job spec with Vault integration for secrets.
 
 ## Nomad Deployment
 
+### Vault Setup
+
+Store secrets in Vault for secure deployment:
+
+```bash
+# AWS credentials for S3 access
+vault kv put secret/aws/transcription \
+  access_key="AKIA..." \
+  secret_key="xxx..."
+
+# Optional: HuggingFace token for model access
+vault kv put secret/hf/transcription \
+  token="hf_xxx..."
+```
+
 ### Example Nomad Job (v4.0.0)
 
 ```hcl
@@ -191,8 +206,11 @@ job "video-transcription" {
 AWS_ACCESS_KEY_ID="{{ .Data.data.access_key }}"
 AWS_SECRET_ACCESS_KEY="{{ .Data.data.secret_key }}"
 {{ end }}
+{{ with secret "secret/hf/transcription" }}
+HF_TOKEN="{{ .Data.data.token }}"
+{{ end }}
 EOF
-        destination = "secrets/aws.env"
+        destination = "secrets/app.env"
         env         = true
       }
 
