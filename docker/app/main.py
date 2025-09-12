@@ -183,8 +183,6 @@ def create_config_from_env() -> Dict:
             'transcriber_bucket': os.getenv('S3_TRANSCRIBER_BUCKET'),
             'transcriber_prefix': os.getenv('S3_TRANSCRIBER_PREFIX', ''),
             'job_id': os.getenv('S3_JOB_ID'),
-            'video_bucket': os.getenv('S3_VIDEO_BUCKET', 'video-bucket'),
-            'output_bucket': os.getenv('S3_OUTPUT_BUCKET', 'transcripts-bucket'),
             'region': os.getenv('AWS_REGION', 'us-east-1'),
             'endpoint': os.getenv('S3_ENDPOINT', '')
         },

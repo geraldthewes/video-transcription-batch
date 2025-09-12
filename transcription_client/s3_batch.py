@@ -261,8 +261,6 @@ class S3BatchManager:
     def create_nomad_env_vars(
         self,
         job_id: str,
-        video_bucket: str,
-        output_bucket: str,
         ollama_url: str,
         hf_token: Optional[str] = None,
         **kwargs
@@ -271,9 +269,7 @@ class S3BatchManager:
         Create environment variables for Nomad job.
         
         Args:
-            job_id: Job ID for S3 tasks/results
-            video_bucket: S3 bucket for storing downloaded videos
-            output_bucket: S3 bucket for storing transcription outputs
+            job_id: Job ID for S3 job directory  
             ollama_url: URL of Ollama service
             hf_token: HuggingFace token (optional)
             **kwargs: Additional environment variables
@@ -285,10 +281,7 @@ class S3BatchManager:
             'S3_TRANSCRIBER_BUCKET': self.transcriber_bucket,
             'S3_TRANSCRIBER_PREFIX': self.transcriber_prefix,
             'S3_JOB_ID': job_id,
-            'S3_VIDEO_BUCKET': video_bucket,
-            'S3_OUTPUT_BUCKET': output_bucket,
             'OLLAMA_URL': ollama_url,
-            'SPEAKER_DIARIZATION': 'true',
             'AWS_REGION': self.aws_region,
         }
         

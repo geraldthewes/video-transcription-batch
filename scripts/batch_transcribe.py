@@ -95,8 +95,6 @@ def upload_tasks(args):
     if args.generate_env:
         env_vars = manager.create_nomad_env_vars(
             job_id=job_id,
-            video_bucket=args.video_bucket or os.getenv('S3_VIDEO_BUCKET', 'video-bucket'),
-            output_bucket=args.output_bucket or os.getenv('S3_OUTPUT_BUCKET', 'transcripts-bucket'),
             ollama_url=args.ollama_url or os.getenv('OLLAMA_URL', 'http://ollama:11434'),
             hf_token=args.hf_token or os.getenv('HF_TOKEN')
         )
@@ -232,7 +230,8 @@ Examples:
   # Upload tasks with transcription parameters
   python -m scripts.batch_transcribe upload my-videos.json \\
     --whisper-model whisper-turbo --speaker-diarization \\
-    --min-segment-size 5 --generate-env
+    --min-segment-size 5 --generate-env \\
+    --ollama-url http://ollama.service.consul:11434
 
   # Check job status
   python -m scripts.batch_transcribe status abc-123-def
@@ -259,9 +258,7 @@ Examples:
     upload_parser.add_argument('--job-id', help='Custom job ID (generates UUID if not provided)')
     upload_parser.add_argument('--generate-env', action='store_true', 
                               help='Generate Nomad environment variables')
-    upload_parser.add_argument('--video-bucket', help='S3 bucket for videos (required with --generate-env)')
-    upload_parser.add_argument('--output-bucket', help='S3 bucket for transcripts (required with --generate-env)')
-    upload_parser.add_argument('--ollama-url', help='Ollama service URL (required with --generate-env)')
+    upload_parser.add_argument('--ollama-url', help='Ollama service URL (for --generate-env)')
     upload_parser.add_argument('--hf-token', help='HuggingFace token')
     
     # Transcription parameters

@@ -157,8 +157,6 @@ job "video-transcription" {
         S3_TRANSCRIBER_BUCKET = "transcription-jobs"
         S3_TRANSCRIBER_PREFIX = "jobs"
         S3_JOB_ID            = "${JOB_ID}"
-        S3_VIDEO_BUCKET      = "videos"
-        S3_OUTPUT_BUCKET     = "transcripts"
         OLLAMA_URL           = "http://ollama.service.consul:11434"
         AWS_REGION           = "us-east-1"
       }
@@ -242,7 +240,8 @@ python -m scripts.batch_transcribe upload my-videos.json \
   --whisper-model whisper-turbo \
   --speaker-diarization \
   --min-segment-size 5 \
-  --generate-env
+  --generate-env \
+  --ollama-url http://ollama.service.consul:11434
 
 # Check job status  
 python -m scripts.batch_transcribe status abc-123-def
