@@ -66,9 +66,10 @@ Use the MCP build service tools (available in Claude sessions after MCP server i
 - Rootless Buildah for secure builds
 
 ### Build Status
-✅ **Latest Build**: Job `399b9a73-084e-4352-a5d0-76ea9a8c7c83` (in progress) - v3.0.0
+✅ **Latest Build**: Job `399b9a73-084e-4352-a5d0-76ea9a8c7c83` completed successfully on 2025-09-12 - v3.0.0
 - **Breaking Change**: Simplified to S3-only configuration (removed legacy file-based support)
-- Zero volume deployment ready for production orchestrators
+- Zero volume deployment ready for production orchestrators  
+- All 15 Docker build steps completed with cached layers (fast build)
 - Image: `registry.cluster:5000/video-transcription-batch:v3.0.0`
 
 ✅ **Previous Builds**: 
