@@ -57,13 +57,19 @@ Use the MCP build service tools (available in Claude sessions after MCP server i
 }
 ```
 
-**Note**: The `dockerfile_path` is `"docker/Dockerfile"` due to the reorganized structure. No `test_commands` are included initially.
+**Note**: The `dockerfile_path` is `"docker/Dockerfile"` due to the reorganized structure. The Dockerfile has been updated to use paths relative to the repository root (e.g., `COPY docker/requirements.txt /app/`). No `test_commands` are included initially.
 
 ### Build Features
 - Three-phase pipeline: Build → Test → Publish
 - WebSocket log streaming for real-time monitoring
 - Integration with private registries (registry.cluster:5000)
 - Rootless Buildah for secure builds
+
+### Build Status
+✅ **Last Successful Build**: Job `71487294-1af4-416e-8bf0-febf3133af43` completed successfully on 2025-09-12
+- All 15 Docker build steps completed
+- Image successfully tagged as `latest` and `v1.0.0`
+- Published to `registry.cluster:5000`
 
 ### Container Contents
 The built container includes:
