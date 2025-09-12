@@ -264,7 +264,6 @@ class S3BatchManager:
             Dictionary of environment variables
         """
         env_vars = {
-            'USE_S3_CONFIG': 'true',
             'S3_TASKS_BUCKET': self.tasks_bucket,
             'S3_TASKS_KEY': f'jobs/{job_id}/tasks.json',
             'S3_RESULTS_BUCKET': self.results_bucket,

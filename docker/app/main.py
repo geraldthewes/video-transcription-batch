@@ -159,9 +159,8 @@ def upload_json_to_s3(s3_client, local_path: str, bucket: str, key: str) -> bool
         return False
 
 
-def setup_s3_client_from_env() -> boto3.client:
+def setup_s3_client() -> boto3.client:
     """Setup S3 client with credentials from environment variables."""
-    # Use environment variables for AWS credentials (Nomad/Vault integration)
     session = boto3.Session(
         aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
         aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
@@ -175,21 +174,6 @@ def setup_s3_client_from_env() -> boto3.client:
     return session.client('s3', **s3_kwargs)
 
 
-def setup_s3_client(config: Dict) -> boto3.client:
-    """Setup S3 client with credentials from config (legacy)."""
-    s3_config = config['s3']
-    
-    session = boto3.Session(
-        aws_access_key_id=s3_config['access_key'],
-        aws_secret_access_key=s3_config['secret_key'],
-        region_name=s3_config['region']
-    )
-    
-    s3_kwargs = {}
-    if 'endpoint' in s3_config and s3_config['endpoint']:
-        s3_kwargs['endpoint_url'] = s3_config['endpoint']
-    
-    return session.client('s3', **s3_kwargs)
 
 
 def create_config_from_env() -> Dict:
@@ -217,7 +201,7 @@ def create_config_from_env() -> Dict:
     }
 
 
-def setup_mst_from_env() -> MultiStepTranscriber:
+def setup_mst() -> MultiStepTranscriber:
     """Setup Multi-Step Transcriber from environment variables."""
     # Set HuggingFace token if provided
     hf_token = os.getenv('HF_TOKEN')
@@ -230,25 +214,6 @@ def setup_mst_from_env() -> MultiStepTranscriber:
         whisper_model=os.getenv('WHISPER_MODEL', 'whisper-turbo'),
         llm_model=os.getenv('LLM_MODEL', 'llama3'),
         embedding_model=os.getenv('EMBEDDING_MODEL', 'nomic-embed-text'),
-    )
-    
-    return mst
-
-
-def setup_mst(config: Dict) -> MultiStepTranscriber:
-    """Setup Multi-Step Transcriber from config (legacy)."""
-    mst_config = config['mst']
-    
-    # Set HuggingFace token if provided
-    if 'hf_token' in mst_config and mst_config['hf_token']:
-        os.environ['HF_TOKEN'] = mst_config['hf_token']
-    
-    # Initialize MST with configuration
-    mst = MultiStepTranscriber(
-        ollama_url=mst_config['ollama_url'],
-        whisper_model=mst_config.get('whisper_model', 'whisper-turbo'),
-        llm_model=mst_config.get('llm_model', 'llama3'),
-        embedding_model=mst_config.get('embedding_model', 'nomic-embed-text'),
     )
     
     return mst
@@ -422,89 +387,52 @@ def main():
     """Main entry point."""
     logger.info("Starting YouTube Video Transcription Service")
     
-    # Determine configuration mode (env-based or file-based)
-    use_s3_mode = os.getenv('USE_S3_CONFIG', 'false').lower() == 'true'
+    # Create configuration from environment variables
+    config = create_config_from_env()
     
-    if use_s3_mode:
-        logger.info("Using S3-based configuration mode")
+    # Setup S3 client from environment
+    try:
+        s3_client = setup_s3_client()
+        logger.info("S3 client initialized")
+    except Exception as e:
+        logger.error(f"Failed to setup S3 client: {e}")
+        sys.exit(1)
+    
+    # Download tasks.json from S3
+    tasks_bucket = os.getenv('S3_TASKS_BUCKET')
+    tasks_key = os.getenv('S3_TASKS_KEY', 'tasks.json')
+    
+    if not tasks_bucket:
+        logger.error("S3_TASKS_BUCKET environment variable is required")
+        sys.exit(1)
         
-        # Create configuration from environment variables
-        config = create_config_from_env()
+    tasks_path = '/tmp/tasks.json'
+    if not download_json_from_s3(s3_client, tasks_bucket, tasks_key, tasks_path):
+        logger.error(f"Failed to download tasks from s3://{tasks_bucket}/{tasks_key}")
+        sys.exit(1)
         
-        # Setup S3 client from environment
-        try:
-            s3_client = setup_s3_client_from_env()
-            logger.info("S3 client initialized from environment")
-        except Exception as e:
-            logger.error(f"Failed to setup S3 client from environment: {e}")
-            sys.exit(1)
-        
-        # Download tasks.json from S3
-        tasks_bucket = os.getenv('S3_TASKS_BUCKET')
-        tasks_key = os.getenv('S3_TASKS_KEY', 'tasks.json')
-        
-        if not tasks_bucket:
-            logger.error("S3_TASKS_BUCKET environment variable is required in S3 mode")
-            sys.exit(1)
-            
-        tasks_path = '/tmp/tasks.json'
-        if not download_json_from_s3(s3_client, tasks_bucket, tasks_key, tasks_path):
-            logger.error(f"Failed to download tasks from s3://{tasks_bucket}/{tasks_key}")
-            sys.exit(1)
-            
-        tasks = load_json_file(tasks_path, required=True)
-        logger.info(f"Downloaded and loaded {len(tasks)} video tasks from S3")
-        
-        # Try to download existing results.json from S3
-        results_bucket = os.getenv('S3_RESULTS_BUCKET', tasks_bucket)
-        results_key = os.getenv('S3_RESULTS_KEY', 'results.json')
-        results_path = '/tmp/results.json'
-        
-        existing_results = []
-        if download_json_from_s3(s3_client, results_bucket, results_key, results_path):
-            existing_results = load_json_file(results_path, required=False) or []
-            logger.info(f"Downloaded and loaded {len(existing_results)} existing results from S3")
-        else:
-            logger.info("No existing results found in S3, starting fresh")
-        
-        # Setup MST from environment
-        try:
-            mst = setup_mst_from_env()
-            logger.info("Multi-Step Transcriber initialized from environment")
-        except Exception as e:
-            logger.error(f"Failed to setup MST from environment: {e}")
-            sys.exit(1)
-            
+    tasks = load_json_file(tasks_path, required=True)
+    logger.info(f"Downloaded and loaded {len(tasks)} video tasks from S3")
+    
+    # Try to download existing results.json from S3
+    results_bucket = os.getenv('S3_RESULTS_BUCKET', tasks_bucket)
+    results_key = os.getenv('S3_RESULTS_KEY', 'results.json')
+    results_path = '/tmp/results.json'
+    
+    existing_results = []
+    if download_json_from_s3(s3_client, results_bucket, results_key, results_path):
+        existing_results = load_json_file(results_path, required=False) or []
+        logger.info(f"Downloaded and loaded {len(existing_results)} existing results from S3")
     else:
-        logger.info("Using legacy file-based configuration mode")
-        
-        # Load configuration from files (legacy mode)
-        config = load_json_file('/app/config.json', required=True)
-        logger.info("Configuration loaded from file")
-        
-        # Setup S3 client from config
-        try:
-            s3_client = setup_s3_client(config)
-            logger.info("S3 client initialized from config")
-        except Exception as e:
-            logger.error(f"Failed to setup S3 client from config: {e}")
-            sys.exit(1)
-        
-        # Load tasks from file
-        tasks = load_json_file('/app/tasks.json', required=True)
-        logger.info(f"Loaded {len(tasks)} video tasks from file")
-        
-        # Load existing results (optional)
-        existing_results = load_json_file('/app/results.json', required=False) or []
-        logger.info(f"Loaded {len(existing_results)} existing results from file")
-        
-        # Setup MST from config
-        try:
-            mst = setup_mst(config)
-            logger.info("Multi-Step Transcriber initialized from config")
-        except Exception as e:
-            logger.error(f"Failed to setup MST from config: {e}")
-            sys.exit(1)
+        logger.info("No existing results found in S3, starting fresh")
+    
+    # Setup MST from environment
+    try:
+        mst = setup_mst()
+        logger.info("Multi-Step Transcriber initialized")
+    except Exception as e:
+        logger.error(f"Failed to setup MST: {e}")
+        sys.exit(1)
     
     # Validate tasks
     if not isinstance(tasks, list):
@@ -519,14 +447,12 @@ def main():
     results = []
     any_failures = False
     
-    # Setup result saving parameters for S3 mode
-    save_params = {}
-    if use_s3_mode:
-        save_params = {
-            's3_client': s3_client,
-            'bucket': results_bucket,
-            's3_key': results_key
-        }
+    # Setup result saving parameters
+    save_params = {
+        's3_client': s3_client,
+        'bucket': results_bucket,
+        's3_key': results_key
+    }
     
     try:
         for task in tqdm(tasks, desc="Processing videos"):
@@ -539,24 +465,15 @@ def main():
                 any_failures = True
             
             # Save intermediate results
-            if use_s3_mode:
-                save_results(results, results_path, **save_params)
-            else:
-                save_results(results)
+            save_results(results, results_path, **save_params)
         
     except KeyboardInterrupt:
         logger.info("Process interrupted by user")
-        if use_s3_mode:
-            save_results(results, results_path, **save_params)
-        else:
-            save_results(results)
+        save_results(results, results_path, **save_params)
         sys.exit(1)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        if use_s3_mode:
-            save_results(results, results_path, **save_params)
-        else:
-            save_results(results)
+        save_results(results, results_path, **save_params)
         sys.exit(1)
     
     # Final results summary
@@ -567,10 +484,7 @@ def main():
     logger.info(f"Processing complete: {success_count} successful, {failed_count} failed, {skipped_count} skipped")
     
     # Save final results
-    if use_s3_mode:
-        save_results(results, results_path, **save_params)
-    else:
-        save_results(results)
+    save_results(results, results_path, **save_params)
     
     # Exit with appropriate code
     sys.exit(1 if any_failures else 0)
