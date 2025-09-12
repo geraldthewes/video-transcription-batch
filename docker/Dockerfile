@@ -58,8 +58,8 @@ RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 RUN python3 -m spacy download en_core_web_sm
 
 
-# Copy the main application script
-COPY main.py /app/
+# Copy the application
+COPY app/ /app/
 
 # Command to run the transcription service
 CMD ["python3", "main.py"]
