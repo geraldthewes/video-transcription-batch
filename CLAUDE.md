@@ -29,13 +29,49 @@ video-transcription-batch/
 ```
 
 ## Container Build
-⚠️ **Important**: The Docker container should be built using the MCP build service tool, not locally on this machine.
+⚠️ **Important**: The Docker container should be built using the Nomad MCP build service, not locally on this machine.
 
-The container includes:
+### MCP Build Service
+The project uses the [Nomad MCP Builder](https://github.com/geraldthewes/nomad-mcp-builder) service integrated via MCP:
+
+**MCP Server Configuration:**
+```bash
+claude mcp add --transport http build-server https://10.0.1.12:31183/mcp
+```
+
+### Build Using MCP Tools
+Use the MCP build service tools (available in Claude sessions after MCP server is added):
+
+**Build Job Parameters:**
+```json
+{
+  "repo_url": "https://github.com/geraldthewes/video-transcription-batch.git",
+  "git_ref": "main",
+  "dockerfile_path": "docker/Dockerfile",
+  "image_name": "video-transcription-batch", 
+  "image_tags": ["latest", "v1.0.0"],
+  "registry_url": "registry.cluster:5000",
+  "owner": "gerald",
+  "git_credentials_path": "secret/nomad/jobs/git-credentials",
+  "registry_credentials_path": "secret/nomad/jobs/registry-credentials"
+}
+```
+
+**Note**: The `dockerfile_path` is `"docker/Dockerfile"` due to the reorganized structure. No `test_commands` are included initially.
+
+### Build Features
+- Three-phase pipeline: Build → Test → Publish
+- WebSocket log streaming for real-time monitoring
+- Integration with private registries (registry.cluster:5000)
+- Rootless Buildah for secure builds
+
+### Container Contents
+The built container includes:
 - Ubuntu 24.04 base with CUDA 12.8
 - PyTorch with GPU support
 - WhisperX and custom transcription libraries
 - FFmpeg for audio/video processing
+- Multi-step transcriber dependencies
 
 ## Python Client Package
 The `transcription_client` package provides:
