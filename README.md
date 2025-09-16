@@ -59,6 +59,23 @@ VAULT_ADDR=https://vault.service.consul:8200
 
 ### Vault Setup
 
+**One-time infrastructure setup** for secure secret management:
+
+#### 1. Automated Setup (Recommended)
+
+```bash
+# Run the setup script to configure Vault policies and verify secrets
+export VAULT_TOKEN=your_vault_token
+./scripts/setup-vault-policies.sh
+```
+
+The setup script will:
+- Create the `transcription-policy` for Nomad jobs
+- Verify AWS credentials and HuggingFace token exist
+- Display status and next steps
+
+#### 2. Manual Setup
+
 Store secrets in Vault for secure deployment:
 
 ```bash
@@ -70,7 +87,23 @@ vault kv put secret/aws/transcription \
 # Optional: HuggingFace token for model access
 vault kv put secret/hf/transcription \
   token="hf_xxx..."
+
+# Create the transcription policy
+vault policy write transcription-policy - <<EOF
+path "secret/data/aws/transcription" {
+  capabilities = ["read"]
+}
+path "secret/data/hf/transcription" {
+  capabilities = ["read"]
+}
+EOF
 ```
+
+#### Requirements
+
+- Vault server accessible and configured
+- `VAULT_TOKEN` environment variable with appropriate permissions
+- Nomad integration with Vault configured
 
 ### S3 Structure
 
@@ -151,19 +184,33 @@ python -m scripts.batch_transcribe download abc-123-def --output results.json
 
 ### generate-nomad-job
 
-Create Nomad HCL job specifications:
+Create Nomad HCL job specifications (v4.0.0 simplified):
 
 ```bash
+# Basic usage (reads configuration from .env file)
 generate-nomad-job \
-  --job-id my-job-123 \
-  --job-name video-transcription-my-job \
-  --video-bucket my-videos \
-  --output-bucket my-transcripts \
-  --ollama-url http://ollama.service.consul:11434 \
-  --docker-image registry.cluster:5000/video-transcription-batch:latest
+  --job-id abc-123-def \
+  --job-name video-transcription-batch
+
+# With custom output file
+generate-nomad-job \
+  --job-id abc-123-def \
+  --job-name video-transcription-batch \
+  --output my-job.hcl
+
+# Override .env settings if needed
+generate-nomad-job \
+  --job-id abc-123-def \
+  --job-name video-transcription-batch \
+  --transcriber-bucket custom-bucket \
+  --ollama-url http://custom-ollama:11434
 ```
 
-This generates a complete Nomad job spec with Vault integration for secrets.
+This generates a complete Nomad job spec with:
+- V4.0.0 unified S3 structure
+- GPU-capable node constraints
+- Vault integration for secure secret access
+- Environment configuration from `.env` file
 
 ## Nomad Deployment
 

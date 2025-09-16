@@ -1,4 +1,6 @@
 # AWS S3 Configuration (for client tools only)
+AWS_ACCESS_KEY_ID=<key>
+AWS_SECRET_ACCESS_KEY=<secret>
 S3_TRANSCRIBER_BUCKET=<your-transcriber-bucket>
 S3_TRANSCRIBER_PREFIX=<your-prefix>
 AWS_REGION=us-east-1

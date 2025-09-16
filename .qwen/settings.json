@@ -1,0 +1,18 @@
+{
+  "apiKey": "***",
+  "base_url": "http://10.0.2.70:8888/v1",
+  "sessionTokenLimit": 32768,
+  "mcpServers": {
+    "builder": {
+      "httpUrl": "http://10.0.1.13:29758/mcp/stream",
+      "timeout": 30000,
+      "trust": true
+    },
+    "serena": {
+      "command": "/home/gerald/miniconda3/envs/video-batch/bin/uv",
+      "args": ["run", "--directory", "/media/gerald/SSDT71/software/serena", "serena", "start-mcp-server"],
+      "timeout": 30000,
+      "trust": true
+    }
+  }
+}

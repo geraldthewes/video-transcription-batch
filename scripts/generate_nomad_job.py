@@ -7,6 +7,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Add the parent directory to Python path to import transcription_client
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -25,6 +26,12 @@ NOMAD_JOB_TEMPLATE = '''job "{job_name}" {{
   group "transcriber" {{
     count = 1
 
+    # Target nodes with GPU capability
+    constraint {{
+      attribute = "${{meta.gpu-capable}}"
+      value     = "true"
+    }}
+
     restart {{
       attempts = 2
       delay    = "30s"
@@ -37,7 +44,7 @@ NOMAD_JOB_TEMPLATE = '''job "{job_name}" {{
 
       config {{
         image = "{docker_image}"
-        
+
         # Optional: configure logging
         logging {{
           type = "json-file"
@@ -48,7 +55,7 @@ NOMAD_JOB_TEMPLATE = '''job "{job_name}" {{
         }}
       }}
 
-      # Environment variables from S3BatchManager
+      # Environment variables for v4.0.0 unified S3 structure
       env {{
 {env_vars}
       }}
@@ -57,8 +64,8 @@ NOMAD_JOB_TEMPLATE = '''job "{job_name}" {{
       template {{
         data = <<EOF
 {{{{ with secret "{aws_secret_path}" }}}}
-AWS_ACCESS_KEY_ID = "{{{{ .Data.data.access_key_id }}}}"
-AWS_SECRET_ACCESS_KEY = "{{{{ .Data.data.secret_access_key }}}}"
+AWS_ACCESS_KEY_ID = "{{{{ .Data.data.access_key }}}}"
+AWS_SECRET_ACCESS_KEY = "{{{{ .Data.data.secret_key }}}}"
 {{{{ end }}}}
 EOF
         destination = "secrets/aws.env"
@@ -79,10 +86,8 @@ EOF
       resources {{
         cpu    = {cpu}
         memory = {memory}
-        
-        device "nvidia/gpu" {{
-          count = {gpu_count}
-        }}
+        # Note: GPU allocation handled by constraint, not device block
+        # since device detection may not be working properly
       }}
 
       # Logs for debugging
@@ -97,35 +102,53 @@ EOF
 
 def generate_nomad_job(args):
     """Generate a Nomad job HCL file."""
-    
-    # Create S3BatchManager to generate environment variables
-    manager = S3BatchManager(
-        aws_region=args.region,
-        s3_endpoint=args.s3_endpoint,
-        tasks_bucket=args.tasks_bucket,
-        results_bucket=args.results_bucket
-    )
-    
-    # Generate environment variables
-    env_vars = manager.create_nomad_env_vars(
-        job_id=args.job_id,
-        video_bucket=args.video_bucket,
-        output_bucket=args.output_bucket,
-        ollama_url=args.ollama_url,
-        **dict(kv.split('=', 1) for kv in args.extra_env)
-    )
+
+    # Load environment variables from .env file
+    load_dotenv()
+
+    # Use values from .env or args (args take precedence)
+    transcriber_bucket = args.transcriber_bucket or os.getenv('S3_TRANSCRIBER_BUCKET')
+    transcriber_prefix = args.transcriber_prefix or os.getenv('S3_TRANSCRIBER_PREFIX', '')
+    ollama_url = args.ollama_url or os.getenv('OLLAMA_URL')
+    aws_region = args.region or os.getenv('AWS_REGION', 'us-east-1')
+    s3_endpoint = args.s3_endpoint or os.getenv('S3_ENDPOINT_URL')
+    datacenter = args.datacenter or os.getenv('NOMAD_DATACENTER', 'dc1')
+
+    if not transcriber_bucket:
+        raise ValueError("S3_TRANSCRIBER_BUCKET must be set in .env file or provided via --transcriber-bucket")
+    if not ollama_url:
+        raise ValueError("OLLAMA_URL must be set in .env file or provided via --ollama-url")
+
+    # Generate environment variables for v4.0.0 unified structure
+    env_vars = {
+        'S3_TRANSCRIBER_BUCKET': transcriber_bucket,
+        'S3_TRANSCRIBER_PREFIX': transcriber_prefix,
+        'S3_JOB_ID': args.job_id,
+        'OLLAMA_URL': ollama_url,
+        'AWS_REGION': aws_region,
+    }
+
+    # Add S3 endpoint if specified
+    if s3_endpoint:
+        env_vars['S3_ENDPOINT'] = s3_endpoint
+
+    # Add any extra environment variables
+    for extra in args.extra_env:
+        if '=' in extra:
+            key, value = extra.split('=', 1)
+            env_vars[key] = value
     
     # Format environment variables for HCL template
     env_lines = []
     for key, value in env_vars.items():
         env_lines.append(f'        {key} = "{value}"')
-    
-    env_vars_str = '\\n'.join(env_lines)
-    
+
+    env_vars_str = '\n'.join(env_lines)
+
     # Generate the job specification
     job_spec = NOMAD_JOB_TEMPLATE.format(
         job_name=args.job_name,
-        datacenter=args.datacenter,
+        datacenter=datacenter,
         vault_policy=args.vault_policy,
         docker_image=args.docker_image,
         env_vars=env_vars_str,
@@ -153,49 +176,52 @@ def generate_nomad_job(args):
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Generate Nomad HCL job specification for S3-based batch transcription",
+        description="Generate Nomad HCL job specification for v4.0.0 unified S3-based batch transcription",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Example:
+Example (reads most settings from .env file):
   generate-nomad-job \\
-    --job-id abc-123-def \\
-    --job-name video-transcription-abc123 \\
-    --video-bucket my-videos \\
-    --output-bucket my-transcripts \\
-    --ollama-url http://ollama.service.consul:11434 \\
-    --docker-image registry.cluster:5000/video-transcription-batch:latest
+    --job-id 18517e9c-f624-4a16-bc10-a9236dbea7e1 \\
+    --job-name video-transcription-batch
+
+With custom settings:
+  generate-nomad-job \\
+    --job-id 18517e9c-f624-4a16-bc10-a9236dbea7e1 \\
+    --job-name video-transcription-batch \\
+    --transcriber-bucket custom-bucket \\
+    --ollama-url http://custom-ollama:11434
         """
     )
-    
+
     # Required arguments
     parser.add_argument('--job-id', required=True, help='S3 job ID for tasks/results')
     parser.add_argument('--job-name', required=True, help='Nomad job name')
-    parser.add_argument('--video-bucket', required=True, help='S3 bucket for storing videos')
-    parser.add_argument('--output-bucket', required=True, help='S3 bucket for storing transcripts')
-    parser.add_argument('--ollama-url', required=True, help='Ollama service URL')
+
+    # Optional arguments (read from .env by default)
+    parser.add_argument('--transcriber-bucket', help='S3 transcriber bucket (or use S3_TRANSCRIBER_BUCKET from .env)')
+    parser.add_argument('--transcriber-prefix', help='S3 transcriber prefix (or use S3_TRANSCRIBER_PREFIX from .env)')
+    parser.add_argument('--ollama-url', help='Ollama service URL (or use OLLAMA_URL from .env)')
     
     # Docker and infrastructure
-    parser.add_argument('--docker-image', default='registry.cluster:5000/video-transcription-batch:latest',
+    parser.add_argument('--docker-image', default='registry.cluster:5000/video-transcription-batch:v4.0.0',
                         help='Docker image for transcription service')
-    parser.add_argument('--datacenter', default='dc1', help='Nomad datacenter')
-    
+    parser.add_argument('--datacenter', help='Nomad datacenter (or use NOMAD_DATACENTER from .env, defaults to dc1)')
+
     # S3 configuration
-    parser.add_argument('--region', default='us-east-1', help='AWS region')
-    parser.add_argument('--s3-endpoint', help='Custom S3 endpoint URL')
-    parser.add_argument('--tasks-bucket', help='S3 bucket for tasks (or set S3_TASKS_BUCKET env var)')
-    parser.add_argument('--results-bucket', help='S3 bucket for results (defaults to tasks bucket)')
+    parser.add_argument('--region', help='AWS region (or use AWS_REGION from .env, defaults to us-east-1)')
+    parser.add_argument('--s3-endpoint', help='Custom S3 endpoint URL (or use S3_ENDPOINT_URL from .env)')
     
-    # Resource allocation
-    parser.add_argument('--cpu', type=int, default=2000, help='CPU allocation in MHz')
-    parser.add_argument('--memory', type=int, default=4096, help='Memory allocation in MB')
+    # Resource allocation (increased defaults for AI/ML workloads)
+    parser.add_argument('--cpu', type=int, default=8000, help='CPU allocation in MHz')
+    parser.add_argument('--memory', type=int, default=16384, help='Memory allocation in MB')
     parser.add_argument('--gpu-count', type=int, default=1, help='Number of GPUs to allocate')
     
     # Vault configuration
-    parser.add_argument('--vault-policy', default='transcription-policy', 
+    parser.add_argument('--vault-policy', default='transcription-policy',
                         help='Vault policy for accessing secrets')
-    parser.add_argument('--aws-secret-path', default='secret/nomad/jobs/aws-credentials',
+    parser.add_argument('--aws-secret-path', default='secret/aws/transcription',
                         help='Vault path for AWS credentials')
-    parser.add_argument('--hf-secret-path', default='secret/nomad/jobs/hf-token',
+    parser.add_argument('--hf-secret-path', default='secret/hf/transcription',
                         help='Vault path for HuggingFace token')
     
     # Additional options
