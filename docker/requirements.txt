@@ -1,8 +1,5 @@
 yt-dlp>=2024.8.6
 boto3>=1.35.0
-torch>=2.5.0 --index-url https://download.pytorch.org/whl/cu126
-git+https://github.com/geraldthewes/topic-treeseg.git
-git+https://github.com/geraldthewes/multistep-transcriber.git
 whisperx>=3.1.1
 pyannote.audio>=3.3.1
 ollama>=0.3.3
