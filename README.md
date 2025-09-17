@@ -112,7 +112,8 @@ Each job is organized under a UUID-based directory:
 s3://transcriber-bucket/prefix/job-uuid/
 ├── tasks.json          # Video tasks to process
 ├── config.json         # Transcription parameters
-├── results.json        # Processing results  
+├── resources.json      # Resource allocation configuration
+├── results.json        # Processing results
 ├── inputs/             # Downloaded videos
 └── outputs/            # Generated transcripts
 ```
@@ -169,10 +170,17 @@ python -m scripts.batch_transcribe upload my-videos.json \
   --generate-env \
   --ollama-url http://ollama.service.consul:11434
 
+# Upload tasks with custom resource allocation
+python -m scripts.batch_transcribe upload my-videos.json \
+  --cpu 16000 \
+  --memory 32768 \
+  --gpu-count 2 \
+  --whisper-model whisper-turbo
+
 # Check job status
 python -m scripts.batch_transcribe status abc-123-def
 
-# View transcription configuration
+# View transcription and resource configuration
 python -m scripts.batch_transcribe config abc-123-def
 
 # List all jobs
@@ -204,6 +212,20 @@ generate-nomad-job \
   --job-name video-transcription-batch \
   --transcriber-bucket custom-bucket \
   --ollama-url http://custom-ollama:11434
+
+# Load resource configuration from S3 job
+generate-nomad-job \
+  --job-id abc-123-def \
+  --job-name video-transcription-batch \
+  --load-resources-from-s3
+
+# Override resource allocation
+generate-nomad-job \
+  --job-id abc-123-def \
+  --job-name video-transcription-batch \
+  --cpu 16000 \
+  --memory 32768 \
+  --gpu-count 2
 ```
 
 This generates a complete Nomad job spec with:
@@ -211,6 +233,73 @@ This generates a complete Nomad job spec with:
 - GPU-capable node constraints
 - Vault integration for secure secret access
 - Environment configuration from `.env` file
+- Configurable resource allocation (CPU, memory, GPU)
+
+## Resource Allocation
+
+Nomad jobs can be allocated system resources (CPU, memory, GPU) based on workload requirements. Resource configurations can be set during task upload and stored in S3 for consistent deployment.
+
+### Resource Configuration Defaults
+
+The system provides different defaults based on context:
+
+| Component | CPU (MHz) | Memory (MB) | GPU Count | Use Case |
+|-----------|-----------|-------------|-----------|----------|
+| **generate-nomad-job** | 8000 | 16384 | 1 | Production AI/ML workloads |
+| **batch_transcribe submit** | 2000 | 4096 | 1 | Basic transcription |
+| **S3 stored config** | Variable | Variable | Variable | Per-job customization |
+
+### Setting Resource Requirements
+
+#### During Task Upload
+
+```bash
+# Set resource requirements when uploading tasks
+python -m scripts.batch_transcribe upload my-videos.json \
+  --cpu 16000 \
+  --memory 32768 \
+  --gpu-count 2 \
+  --whisper-model whisper-turbo
+```
+
+#### During Job Generation
+
+```bash
+# Override defaults in Nomad job generation
+generate-nomad-job \
+  --job-id abc-123-def \
+  --job-name video-transcription-batch \
+  --cpu 16000 \
+  --memory 32768 \
+  --gpu-count 2
+
+# Or load from S3 configuration
+generate-nomad-job \
+  --job-id abc-123-def \
+  --job-name video-transcription-batch \
+  --load-resources-from-s3
+```
+
+### Resource Configuration Format
+
+Resources are stored in S3 as `resources.json`:
+
+```json
+{
+  "cpu": 16000,
+  "memory": 32768,
+  "gpu_count": 2
+}
+```
+
+### Resource Recommendations
+
+| Workload Type | CPU | Memory | GPU | Notes |
+|---------------|-----|--------|-----|-------|
+| **Light Processing** | 2000 MHz | 4096 MB | 1 | Short videos, basic models |
+| **Standard Processing** | 8000 MHz | 16384 MB | 1 | Most transcription workloads |
+| **Heavy Processing** | 16000 MHz | 32768 MB | 2 | Long videos, advanced models |
+| **Batch Processing** | 32000 MHz | 65536 MB | 4 | Large batch jobs |
 
 ## Nomad Deployment
 
@@ -297,6 +386,11 @@ job_id = manager.upload_tasks(
         'whisper_model': 'whisper-turbo',
         'speaker_diarization': True,
         'min_segment_size': 5
+    },
+    resource_config={
+        'cpu': 16000,
+        'memory': 32768,
+        'gpu_count': 2
     }
 )
 
@@ -304,10 +398,11 @@ job_id = manager.upload_tasks(
 status = manager.get_job_status(job_id)
 print(f"Progress: {status['progress']:.1%}")
 
-# Download results and config when complete
+# Download results and configurations when complete
 if status['status'] == 'completed':
     results = manager.download_results(job_id)
     config = manager.download_config(job_id)
+    resource_config = manager.download_resource_config(job_id)
 ```
 
 ## File Formats
@@ -341,6 +436,16 @@ if status['status'] == 'completed':
 ]
 ```
 
+### Resource Configuration Format (resources.json)
+
+```json
+{
+  "cpu": 16000,
+  "memory": 32768,
+  "gpu_count": 2
+}
+```
+
 ## Output Structure
 
 ### S3 Storage Layout (v4.0.0)
@@ -349,7 +454,8 @@ if status['status'] == 'completed':
 ```
 s3://transcriber-bucket/prefix/job-uuid/
 ├── tasks.json          # Input video tasks
-├── config.json         # Transcription parameters  
+├── config.json         # Transcription parameters
+├── resources.json      # Resource allocation configuration
 ├── results.json        # Processing results
 ├── inputs/             # Downloaded videos
 │   └── {channel}/{video_id}/{video_id}.mp4

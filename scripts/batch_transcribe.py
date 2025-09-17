@@ -86,12 +86,22 @@ def upload_tasks(args):
         transcription_config['speaker_diarization'] = args.speaker_diarization
     if hasattr(args, 'yt_dlp_format') and args.yt_dlp_format:
         transcription_config['yt_dlp_format'] = args.yt_dlp_format
+
+    # Create resource configuration
+    resource_config = {}
+    if hasattr(args, 'cpu') and args.cpu:
+        resource_config['cpu'] = args.cpu
+    if hasattr(args, 'memory') and args.memory:
+        resource_config['memory'] = args.memory
+    if hasattr(args, 'gpu_count') and args.gpu_count:
+        resource_config['gpu_count'] = args.gpu_count
     
     # Upload to S3
     job_id = manager.upload_tasks(
-        tasks, 
+        tasks,
         job_id=args.job_id,
-        transcription_config=transcription_config if transcription_config else None
+        transcription_config=transcription_config if transcription_config else None,
+        resource_config=resource_config if resource_config else None
     )
     
     print(f"✅ Uploaded {len(tasks)} tasks to S3")
@@ -178,17 +188,30 @@ def download_results(args):
 def view_config(args):
     """View transcription configuration for a job."""
     manager = create_manager_from_env(aws_profile=args.profile)
-    
+
     config = manager.download_config(args.job_id)
-    
-    if not config:
-        print(f"❌ No transcription config found for job {args.job_id}")
-        return
-    
+    resource_config = manager.download_resource_config(args.job_id)
+
     print(f"📋 Job ID: {args.job_id}")
-    print("🔧 Transcription Configuration:")
-    for key, value in config.items():
-        print(f"   {key}: {value}")
+
+    if config:
+        print("🔧 Transcription Configuration:")
+        for key, value in config.items():
+            print(f"   {key}: {value}")
+    else:
+        print("❌ No transcription config found")
+
+    if resource_config:
+        print("💻 Resource Configuration:")
+        for key, value in resource_config.items():
+            if key == 'cpu':
+                print(f"   {key}: {value} MHz")
+            elif key == 'memory':
+                print(f"   {key}: {value} MB")
+            else:
+                print(f"   {key}: {value}")
+    else:
+        print("💻 Resource Configuration: Using system defaults")
 
 
 def create_tasks(args):
@@ -236,6 +259,7 @@ def submit_job(args):
     try:
         tasks = manager.download_tasks(args.job_id)
         config = manager.download_config(args.job_id) or {}
+        resource_config = manager.download_resource_config(args.job_id) or {}
         logger.info(f"Found job {args.job_id} with {len(tasks)} tasks")
     except Exception as e:
         logger.error(f"Job {args.job_id} not found in S3: {e}")
@@ -281,12 +305,12 @@ def submit_job(args):
                         "Envvars": True
                     }],
                     "Resources": {
-                        "CPU": 2000,
-                        "MemoryMB": 4096,
+                        "CPU": resource_config.get('cpu', args.cpu),
+                        "MemoryMB": resource_config.get('memory', args.memory),
                         "Devices": [{
                             "Name": "nvidia/gpu",
-                            "Count": 1
-                        }]
+                            "Count": resource_config.get('gpu_count', 1)
+                        }] if not args.no_gpu else []
                     }
                 }]
             }]
@@ -341,6 +365,11 @@ Examples:
     --min-segment-size 5 --generate-env \\
     --ollama-url http://ollama.service.consul:11434
 
+  # Upload tasks with custom resource allocation
+  python -m scripts.batch_transcribe upload my-videos.json \\
+    --cpu 16000 --memory 32768 --gpu-count 2 \\
+    --whisper-model whisper-turbo
+
   # Check job status
   python -m scripts.batch_transcribe status abc-123-def --profile my-aws-profile
   
@@ -381,6 +410,11 @@ Examples:
     upload_parser.add_argument('--speaker-diarization', action='store_true', help='Enable speaker diarization')
     upload_parser.add_argument('--no-speaker-diarization', dest='speaker_diarization', action='store_false', help='Disable speaker diarization')
     upload_parser.add_argument('--yt-dlp-format', help='yt-dlp format string (e.g., best)')
+
+    # Resource allocation parameters
+    upload_parser.add_argument('--cpu', type=int, help='CPU allocation in MHz (default: use system defaults)')
+    upload_parser.add_argument('--memory', type=int, help='Memory allocation in MB (default: use system defaults)')
+    upload_parser.add_argument('--gpu-count', type=int, help='Number of GPUs to allocate (default: 1)')
     
     # Status command
     status_parser = subparsers.add_parser('status', help='Check job status')

@@ -73,15 +73,16 @@ class S3BatchManager:
         if not self.transcriber_bucket:
             raise ValueError("transcriber_bucket must be provided or S3_TRANSCRIBER_BUCKET env var must be set")
     
-    def upload_tasks(self, tasks: List[Dict[str, Any]], job_id: Optional[str] = None, transcription_config: Optional[Dict[str, Any]] = None) -> str:
+    def upload_tasks(self, tasks: List[Dict[str, Any]], job_id: Optional[str] = None, transcription_config: Optional[Dict[str, Any]] = None, resource_config: Optional[Dict[str, Any]] = None) -> str:
         """
         Upload tasks to S3 and return the job ID.
-        
+
         Args:
             tasks: List of task dictionaries (video URL, title, description, etc.)
             job_id: Optional job ID (will generate UUID if not provided)
             transcription_config: Optional transcription configuration parameters
-            
+            resource_config: Optional resource allocation configuration (cpu, memory, gpu_count)
+
         Returns:
             Job ID for the uploaded tasks
         """
@@ -119,7 +120,19 @@ class S3BatchManager:
                     ContentType='application/json'
                 )
                 logger.info(f"Uploaded transcription config to s3://{self.transcriber_bucket}/{config_key}")
-            
+
+            # Upload resource config if provided
+            if resource_config:
+                resource_key = f"{self.transcriber_prefix}{job_id}/resources.json"
+                resource_json = json.dumps(resource_config, indent=2, ensure_ascii=False)
+                self.s3_client.put_object(
+                    Bucket=self.transcriber_bucket,
+                    Key=resource_key,
+                    Body=resource_json.encode('utf-8'),
+                    ContentType='application/json'
+                )
+                logger.info(f"Uploaded resource config to s3://{self.transcriber_bucket}/{resource_key}")
+
             logger.info(f"Uploaded {len(tasks)} tasks to s3://{self.transcriber_bucket}/{tasks_key}")
             return job_id
             
@@ -369,4 +382,35 @@ class S3BatchManager:
                 raise
         except Exception as e:
             logger.error(f"Failed to parse config JSON: {e}")
+            raise
+
+    def download_resource_config(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Download resource configuration from S3 for a given job ID.
+
+        Args:
+            job_id: Job ID to download resource config for
+
+        Returns:
+            Resource configuration dictionary, or None if not found
+        """
+        resource_key = f"{self.transcriber_prefix}{job_id}/resources.json"
+
+        try:
+            response = self.s3_client.get_object(Bucket=self.transcriber_bucket, Key=resource_key)
+            resource_json = response['Body'].read().decode('utf-8')
+            resource_config = json.loads(resource_json)
+
+            logger.info(f"Downloaded resource config from s3://{self.transcriber_bucket}/{resource_key}")
+            return resource_config
+
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                logger.info(f"Resource config file not found: s3://{self.transcriber_bucket}/{resource_key}")
+                return None
+            else:
+                logger.error(f"Failed to download resource config: {e}")
+                raise
+        except Exception as e:
+            logger.error(f"Failed to parse resource config JSON: {e}")
             raise

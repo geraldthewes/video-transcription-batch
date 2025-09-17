@@ -119,6 +119,31 @@ def generate_nomad_job(args):
     if not ollama_url:
         raise ValueError("OLLAMA_URL must be set in .env file or provided via --ollama-url")
 
+    # Load resource configuration from S3 if requested
+    cpu = args.cpu
+    memory = args.memory
+    gpu_count = args.gpu_count
+
+    if args.load_resources_from_s3:
+        try:
+            manager = S3BatchManager(
+                aws_region=aws_region,
+                s3_endpoint=s3_endpoint,
+                transcriber_bucket=transcriber_bucket,
+                transcriber_prefix=transcriber_prefix,
+            )
+            resource_config = manager.download_resource_config(args.job_id)
+            if resource_config:
+                cpu = resource_config.get('cpu', cpu)
+                memory = resource_config.get('memory', memory)
+                gpu_count = resource_config.get('gpu_count', gpu_count)
+                print(f"📊 Loaded resource config from S3: CPU={cpu}MHz, Memory={memory}MB, GPU={gpu_count}")
+            else:
+                print(f"⚠️  No resource config found in S3, using defaults")
+        except Exception as e:
+            print(f"⚠️  Failed to load resource config from S3: {e}")
+            print(f"💻 Using command-line/default values")
+
     # Generate environment variables for v4.0.0 unified structure
     env_vars = {
         'S3_TRANSCRIBER_BUCKET': transcriber_bucket,
@@ -154,9 +179,9 @@ def generate_nomad_job(args):
         env_vars=env_vars_str,
         aws_secret_path=args.aws_secret_path,
         hf_secret_path=args.hf_secret_path,
-        cpu=args.cpu,
-        memory=args.memory,
-        gpu_count=args.gpu_count
+        cpu=cpu,
+        memory=memory,
+        gpu_count=gpu_count
     )
     
     # Write to file
@@ -212,9 +237,10 @@ With custom settings:
     parser.add_argument('--s3-endpoint', help='Custom S3 endpoint URL (or use S3_ENDPOINT_URL from .env)')
     
     # Resource allocation (increased defaults for AI/ML workloads)
-    parser.add_argument('--cpu', type=int, default=8000, help='CPU allocation in MHz')
-    parser.add_argument('--memory', type=int, default=16384, help='Memory allocation in MB')
-    parser.add_argument('--gpu-count', type=int, default=1, help='Number of GPUs to allocate')
+    parser.add_argument('--cpu', type=int, default=8000, help='CPU allocation in MHz (default: 8000)')
+    parser.add_argument('--memory', type=int, default=16384, help='Memory allocation in MB (default: 16384)')
+    parser.add_argument('--gpu-count', type=int, default=1, help='Number of GPUs to allocate (default: 1)')
+    parser.add_argument('--load-resources-from-s3', action='store_true', help='Load resource config from S3 job (overrides --cpu/--memory/--gpu-count)')
     
     # Vault configuration
     parser.add_argument('--vault-policy', default='transcription-policy',
