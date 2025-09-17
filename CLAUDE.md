@@ -48,14 +48,14 @@ Use the MCP build service tools (available in Claude sessions after MCP server i
   "repo_url": "https://github.com/geraldthewes/video-transcription-batch.git",
   "git_ref": "main",
   "dockerfile_path": "docker/Dockerfile",
-  "image_name": "video-transcription-batch", 
-  "image_tags": ["latest", "v1.0.0"],
+  "image_name": "video-transcription-batch",
+  "image_tags": ["latest", "v4.0.1"],
   "registry_url": "registry.cluster:5000",
-  "owner": "gerald",
-  "git_credentials_path": "secret/nomad/jobs/git-credentials",
-  "registry_credentials_path": "secret/nomad/jobs/registry-credentials"
+  "owner": "gerald"
 }
 ```
+
+**⚠️ IMPORTANT**: Do NOT include `git_credentials_path` or `registry_credentials_path` parameters as they are not needed for this public repository and will cause build failures.
 
 **Note**: The `dockerfile_path` is `"docker/Dockerfile"` due to the reorganized structure. The Dockerfile has been updated to use paths relative to the repository root (e.g., `COPY docker/requirements.txt /app/`). No `test_commands` are included initially.
 
