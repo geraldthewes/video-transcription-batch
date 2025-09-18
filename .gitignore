@@ -32,6 +32,7 @@ tests/
 # IDEs
 .vscode/
 .idea/
+.serena/
 *.swp
 *.swo
 *~
