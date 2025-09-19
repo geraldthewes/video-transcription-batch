@@ -21,9 +21,9 @@ RUN git clone https://github.com/geraldthewes/multistep-transcriber.git /tmp/mul
     && cd /tmp/multistep-transcriber \
     && pip3 install --no-cache-dir . \
     && rm -rf /tmp/multistep-transcriber
-# Install remaining requirements without dependencies
+# Install remaining requirements with dependencies to fix botocore issue (v2)
 COPY docker/requirements.txt /app/
-RUN pip3 install --no-cache-dir -r requirements.txt --no-deps
+RUN pip3 install --no-cache-dir -r requirements.txt
 # Download SpaCy model
 RUN python3 -m spacy download en_core_web_sm
 
@@ -32,12 +32,18 @@ FROM docker.io/nvidia/cuda:12.8.0-runtime-ubuntu24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     python3.12 \
+    python3-pip \
+    git \
     ffmpeg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 RUN rm /usr/lib/python3.12/EXTERNALLY-MANAGED
 WORKDIR /app
+# Copy Python environment from builder stage
 COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
+# Reinstall Git-based packages in final stage to ensure they're available
+# RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/topic-treeseg.git
+# RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/multistep-transcriber.git
 COPY docker/app/ /app/
 CMD ["python3", "main.py"]

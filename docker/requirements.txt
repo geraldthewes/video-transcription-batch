@@ -1,5 +1,7 @@
+# Updated requirements to fix botocore import issue (force cache bust v3)
 yt-dlp>=2024.8.6
 boto3>=1.35.0
+botocore>=1.35.0
 whisperx>=3.1.1
 pyannote.audio>=3.3.1
 ollama>=0.3.3
