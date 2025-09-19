@@ -44,11 +44,15 @@ WORKDIR /app
 # Copy Python environment from builder stage
 COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
-# NUCLEAR OPTION: Install botocore in final stage to ensure it's available
+# ULTIMATE CACHE DESTRUCTION - TIMESTAMP V4 $(date +%s)
+RUN echo "Ultimate cache bust timestamp: $(date +%s%N)" > /tmp/ultimate_cache_bust.txt && cat /tmp/ultimate_cache_bust.txt
+# Install ALL packages fresh in final stage
 COPY docker/requirements.txt /app/
 RUN pip3 install --no-cache-dir boto3>=1.35.0 botocore>=1.35.0
-# Reinstall Git-based packages in final stage to ensure they're available
-RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/topic-treeseg.git
-RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/multistep-transcriber.git
+# FORCE FRESH GIT INSTALLS - NO CACHE
+RUN echo "Installing git packages at: $(date)" && \
+    pip3 install --no-cache-dir --force-reinstall git+https://github.com/geraldthewes/topic-treeseg.git && \
+    pip3 install --no-cache-dir --force-reinstall git+https://github.com/geraldthewes/multistep-transcriber.git && \
+    echo "Git packages installed successfully at: $(date)"
 COPY docker/app/ /app/
 CMD ["python3", "main.py"]
