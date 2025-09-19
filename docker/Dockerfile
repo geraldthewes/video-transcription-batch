@@ -44,6 +44,9 @@ WORKDIR /app
 # Copy Python environment from builder stage
 COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
+# NUCLEAR OPTION: Install botocore in final stage to ensure it's available
+COPY docker/requirements.txt /app/
+RUN pip3 install --no-cache-dir boto3>=1.35.0 botocore>=1.35.0
 # Reinstall Git-based packages in final stage to ensure they're available
 # RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/topic-treeseg.git
 # RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/multistep-transcriber.git
