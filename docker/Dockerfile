@@ -21,8 +21,10 @@ RUN git clone https://github.com/geraldthewes/multistep-transcriber.git /tmp/mul
     && cd /tmp/multistep-transcriber \
     && pip3 install --no-cache-dir . \
     && rm -rf /tmp/multistep-transcriber
-# Install remaining requirements with dependencies to fix botocore issue (v2)
+# Install remaining requirements with dependencies to fix botocore issue - NUCLEAR OPTION V3
 COPY docker/requirements.txt /app/
+# FORCE CACHE INVALIDATION - SACRIFICE TO THE DOCKER GODS
+RUN echo "Cache bust: $(date)" > /tmp/cache_bust.txt
 RUN pip3 install --no-cache-dir -r requirements.txt
 # Download SpaCy model
 RUN python3 -m spacy download en_core_web_sm
