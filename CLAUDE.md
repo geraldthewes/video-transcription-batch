@@ -40,6 +40,10 @@ claude mcp add --transport http build-server https://10.0.1.12:31183/mcp
 ```
 
 ### Build Using MCP Tools
+
+🚨 **CRITICAL WARNING: COMMIT FIRST!** 🚨
+**The MCP build service clones from git - changes MUST be committed and pushed before building or builds will use old code!**
+
 Use the MCP build service tools (available in Claude sessions after MCP server is added):
 
 **Build Job Parameters:**
@@ -64,6 +68,12 @@ Use the MCP build service tools (available in Claude sessions after MCP server i
 - WebSocket log streaming for real-time monitoring
 - Integration with private registries (registry.cluster:5000)
 - Rootless Buildah for secure builds
+
+This is a large CUDA project, ensure the system is built, published and tested with sufficioent resources:
+- Reserved CPU 4,000 MHz 
+- Reserved Memory 8,192 MiB 
+- Reserved Disk 20 Gb 
+
 
 ### Build Status
 ✅ **Latest Build**: Job `278de965-6153-4e0e-9008-c1363d612362` completed successfully on 2025-09-12 - v4.0.0
@@ -320,6 +330,18 @@ result = client.get_result(job.id)
 - New features or removed functionality
 
 ### Container Build Requirements
+
+⚠️ **CRITICAL: COMMIT AND PUSH BEFORE BUILDING** ⚠️
+
+**The MCP build service builds from the git repository, NOT from local files. All changes MUST be committed and pushed before triggering builds, or the build will use old versions of your files.**
+
+**PRE-BUILD CHECKLIST:**
+1. ✅ **COMMIT ALL CHANGES**: `git add .` and `git commit -m "..."`
+2. ✅ **PUSH TO REMOTE**: `git push origin main`
+3. ✅ **VERIFY PUSH**: Check that changes appear on GitHub
+4. ✅ **THEN BUILD**: Use MCP build service
+
+**Build When These Change:**
 - **ALWAYS trigger a new container build** when making changes that affect the Docker container:
   - Changes to `docker/app/main.py` (container application code)
   - Changes to `docker/Dockerfile` or `docker/requirements.txt`
@@ -328,5 +350,10 @@ result = client.get_result(job.id)
 - **Monitor build progress** and update CLAUDE.md with successful build status
 - Use the MCP build service to ensure consistency and proper tagging
 - Update version references in documentation after successful builds
+
+**Cache Issues:**
+- Docker cache is extremely persistent across builds
+- If changes don't appear, add cache-busting comments to Dockerfile
+- Consider changing file content (not just comments) to force cache invalidation
 
 This ensures users always have accurate, up-to-date information regardless of which documentation file they reference.
