@@ -48,7 +48,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY docker/requirements.txt /app/
 RUN pip3 install --no-cache-dir boto3>=1.35.0 botocore>=1.35.0
 # Reinstall Git-based packages in final stage to ensure they're available
-# RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/topic-treeseg.git
-# RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/multistep-transcriber.git
+RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/topic-treeseg.git
+RUN pip3 install --no-cache-dir git+https://github.com/geraldthewes/multistep-transcriber.git
 COPY docker/app/ /app/
 CMD ["python3", "main.py"]
