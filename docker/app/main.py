@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 import yt_dlp
 from tqdm import tqdm
 from retrying import retry
-from mst.video_transcriber import MultiStepTranscriber
+from mst import VideoTranscriber
 
 
 logging.basicConfig(
@@ -201,63 +201,63 @@ def create_config_from_env() -> Dict:
     }
 
 
-def setup_mst(config: Dict) -> MultiStepTranscriber:
-    """Setup Multi-Step Transcriber from configuration."""
+def setup_mst(config: Dict) -> VideoTranscriber:
+    """Setup VideoTranscriber from configuration."""
     mst_config = config['mst']
-    
+
     # Set HuggingFace token if provided
     hf_token = mst_config.get('hf_token')
     if hf_token:
         os.environ['HF_TOKEN'] = hf_token
-    
-    # Initialize MST with configuration
-    mst = MultiStepTranscriber(
-        ollama_url=mst_config['ollama_url'],
-        whisper_model=mst_config['whisper_model'],
-        llm_model=mst_config['llm_model'],
-        embedding_model=mst_config['embedding_model'],
-    )
-    
-    return mst
 
-
-def transcribe_audio(mst: MultiStepTranscriber, audio_path: str, video_metadata: Dict, 
-                    speaker_diarization: bool, config: Dict, transcription_config: Dict) -> Dict[str, str]:
-    """Transcribe audio using MST and return paths to output files."""
-    mst_config = config['mst']
-    
-    # Prepare transcription parameters
-    transcribe_params = {
-        'enable_speaker_diarization': speaker_diarization,
+    # Create configuration for VideoTranscriber
+    video_transcriber_config = {
+        "MIN_SEGMENT_SIZE": mst_config.get('min_segment_size', 5),
+        "LAMBDA_BALANCE": 0,
+        "UTTERANCE_EXPANSION_WIDTH": 2,
+        "EMBEDDINGS": {
+            "ollama_url": mst_config['ollama_url'],
+            "embedding_model": mst_config.get('embedding_model', 'nomic-embed-text'),
+            "llm_model": mst_config.get('llm_model', 'llama3')
+        },
+        "TEXT_KEY": "transcript",
+        "WHISPER_MODEL": mst_config.get('whisper_model', 'whisper-turbo')
     }
-    
-    # Add parameters from transcription_config (overrides defaults)
-    if 'min_segment_size' in transcription_config:
-        transcribe_params['min_segment_size'] = transcription_config['min_segment_size']
-    elif 'min_segment_size' in mst_config:
-        transcribe_params['min_segment_size'] = mst_config['min_segment_size']
-    
+
+    # Initialize VideoTranscriber with configuration
+    transcriber = VideoTranscriber(video_transcriber_config)
+
+    return transcriber
+
+
+def transcribe_video(transcriber: VideoTranscriber, video_path: str, video_metadata: Dict,
+                    speaker_diarization: bool, config: Dict, transcription_config: Dict) -> Dict[str, str]:
+    """Transcribe video using VideoTranscriber and return paths to output files."""
+
     try:
-        # Run MST transcription
-        result = mst.transcribe(
-            audio_path=audio_path,
-            title=video_metadata.get('title', 'Unknown'),
-            description=video_metadata.get('description', ''),
-            **transcribe_params
-        )
-        
-        # MST should return paths to the generated files
+        # Run VideoTranscriber transcription
+        # Note: VideoTranscriber works with video files directly, not just audio
+        result, nouns_list = transcriber.transcribe_video(video_path)
+
+        # Get topics and summary
+        max_topics = transcription_config.get('max_topics', 10)
+        result, headlines, summary = transcriber.topics(video_path, result, max_topics)
+
+        # Format the transcript and generate output files
+        output_files = transcriber.format_transcript(video_path, result, nouns_list, headlines, summary)
+
+        # The output_files should contain paths to generated files
         return {
-            'markdown_path': result.get('markdown_path'),
-            'json_path': result.get('json_path')
+            'markdown_path': output_files.get('markdown_path'),
+            'json_path': output_files.get('json_path')
         }
-        
+
     except Exception as e:
-        logger.error(f"MST transcription failed: {e}")
+        logger.error(f"VideoTranscriber transcription failed: {e}")
         raise
 
 
-def process_video(task: Dict, config: Dict, transcription_config: Dict, s3_client, mst: MultiStepTranscriber, 
+def process_video(task: Dict, config: Dict, transcription_config: Dict, s3_client, transcriber: VideoTranscriber,
                  results: List[Dict]) -> Dict:
     """Process a single video task."""
     video_id = extract_video_id(task['url'])
@@ -320,11 +320,11 @@ def process_video(task: Dict, config: Dict, transcription_config: Dict, s3_clien
             logger.info(f"Extracting audio from {video_id}")
             extract_audio(video_path, audio_path)
             
-            # Transcribe with MST
-            logger.info(f"Transcribing {video_id} with MST")
+            # Transcribe with VideoTranscriber
+            logger.info(f"Transcribing {video_id} with VideoTranscriber")
             speaker_diarization = transcription_config.get('speaker_diarization', True)
-            transcription_outputs = transcribe_audio(
-                mst, audio_path, task, speaker_diarization, config, transcription_config
+            transcription_outputs = transcribe_video(
+                transcriber, video_path, task, speaker_diarization, config, transcription_config
             )
             
             # Upload transcription outputs to S3
@@ -486,12 +486,12 @@ def main():
     else:
         logger.info("No existing results found in S3, starting fresh")
     
-    # Setup MST from environment
+    # Setup VideoTranscriber from environment
     try:
-        mst = setup_mst(config)
-        logger.info("Multi-Step Transcriber initialized")
+        transcriber = setup_mst(config)
+        logger.info("VideoTranscriber initialized")
     except Exception as e:
-        logger.error(f"Failed to setup MST: {e}")
+        logger.error(f"Failed to setup VideoTranscriber: {e}")
         sys.exit(1)
     
     # Validate tasks
@@ -513,7 +513,7 @@ def main():
     try:
         for task in tqdm(tasks, desc="Processing videos"):
             result = process_video(
-                task, config, transcription_config, s3_client, mst, existing_results
+                task, config, transcription_config, s3_client, transcriber, existing_results
             )
             results.append(result)
             
