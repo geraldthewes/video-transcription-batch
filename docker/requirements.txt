@@ -1,4 +1,4 @@
-# Updated requirements to fix botocore import issue (force cache bust v3)
+# Core application requirements
 yt-dlp>=2024.8.6
 boto3>=1.35.0
 botocore>=1.35.0
@@ -9,4 +9,12 @@ huggingface_hub>=0.25.0
 tqdm>=4.66.0
 retrying>=1.3.4
 spacy>=3.7.0
-# ULTIMATE_CACHE_ANNIHILATION_V4_$(date +%s%N)_SURRENDER_CACHE_GODS
+
+# Dependencies required by multistep-transcriber (for --no-deps install)
+ctranslate2>=4.4.0
+faster-whisper
+transformers
+sentence_transformers
+gliner
+setfit
+structlog
