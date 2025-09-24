@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 import yt_dlp
 from tqdm import tqdm
 from retrying import retry
-from multistep_transcriber import MultiStepTranscriber
+from mst.video_transcriber import MultiStepTranscriber
 
 
 logging.basicConfig(
