@@ -19,8 +19,8 @@ RUN pip3 install --no-cache-dir \
 # Install remaining requirements
 COPY docker/requirements.txt /app/
 RUN pip3 install --no-cache-dir -r requirements.txt
-# Download SpaCy model
-RUN python3 -m spacy download en_core_web_sm
+# Ensure temp directories exist and download SpaCy model
+RUN mkdir -p /tmp /var/tmp && python3 -m spacy download en_core_web_sm
 
 # Final stage
 FROM docker.io/nvidia/cuda:12.8.0-runtime-ubuntu24.04
