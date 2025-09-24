@@ -27,6 +27,8 @@ FROM docker.io/nvidia/cuda:12.8.0-runtime-ubuntu24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     python3.12 \
+    python3-pip \
+    git \
     ffmpeg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -35,5 +37,9 @@ WORKDIR /app
 # Copy Python environment from builder stage
 COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
+# Install git packages in final stage to ensure they're available
+RUN pip3 install --no-cache-dir \
+    git+https://github.com/geraldthewes/topic-treeseg.git \
+    git+https://github.com/geraldthewes/multistep-transcriber.git
 COPY docker/app/ /app/
 CMD ["python3", "main.py"]
