@@ -36,7 +36,7 @@ The project uses the [Nomad MCP Builder](https://github.com/geraldthewes/nomad-m
 
 **MCP Server Configuration:**
 ```bash
-claude mcp add --transport http build-server https://10.0.1.12:31183/mcp
+claude mcp add --transport http build-server https://fabio.service.consul:9999/build/mcp/stream
 ```
 
 ### Build Using MCP Tools
@@ -47,15 +47,23 @@ claude mcp add --transport http build-server https://10.0.1.12:31183/mcp
 Use the MCP build service tools (available in Claude sessions after MCP server is added):
 
 **Build Job Parameters:**
+Please consult the latest documentation on fields available in submitJob. But the most commons are listed below. Please use semantic versioning for versions not vx.y.z.
+
+
 ```json
 {
   "repo_url": "https://github.com/geraldthewes/video-transcription-batch.git",
   "git_ref": "main",
   "dockerfile_path": "docker/Dockerfile",
   "image_name": "video-transcription-batch",
-  "image_tags": ["latest", "v4.0.1"],
+  "image_tags": ["latest", "vx.y.z"],
   "registry_url": "registry.cluster:5000",
-  "owner": "gerald"
+  "owner": "agent",
+  "resource_limits": {
+      "cpu": "2000",     // 2000 MHz (2 CPU cores)
+      "memory": "16384",  // (16 GB RAM)
+      "disk": "20480"    // 20480 MB (20 GB disk)
+  }
 }
 ```
 
@@ -70,8 +78,8 @@ Use the MCP build service tools (available in Claude sessions after MCP server i
 - Rootless Buildah for secure builds
 
 This is a large CUDA project, ensure the system is built, published and tested with sufficioent resources:
-- Reserved CPU 4,000 MHz 
-- Reserved Memory 8,192 MiB 
+- Reserved CPU 2,000 MHz 
+- Reserved Memory 16,384 MiB 
 - Reserved Disk 20 Gb 
 
 

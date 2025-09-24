@@ -1,10 +1,10 @@
 {
   "apiKey": "***",
   "base_url": "http://10.0.2.70:8888/v1",
-  "sessionTokenLimit": 32768,
+  "sessionTokenLimit": "262144",
   "mcpServers": {
-    "builder": {
-      "httpUrl": "http://10.0.1.13:29758/mcp/stream",
+    "nomad-builder": {
+      "httpUrl": "http://fabio.service.consul:9999/build/mcp/stream",
       "timeout": 30000,
       "trust": true
     },
