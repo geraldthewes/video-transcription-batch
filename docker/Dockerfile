@@ -13,14 +13,9 @@ WORKDIR /app
 # Install PyTorch for CUDA 12.8
 RUN pip3 install --no-cache-dir torch==2.8.0+cu128 --index-url https://download.pytorch.org/whl/cu128
 # Install custom Git repositories
-RUN git clone https://github.com/geraldthewes/topic-treeseg.git /tmp/topic-treeseg \
-    && cd /tmp/topic-treeseg \
-    && pip3 install --no-cache-dir . \
-    && rm -rf /tmp/topic-treeseg
-RUN git clone https://github.com/geraldthewes/multistep-transcriber.git /tmp/multistep-transcriber \
-    && cd /tmp/multistep-transcriber \
-    && pip3 install --no-cache-dir . \
-    && rm -rf /tmp/multistep-transcriber
+RUN pip3 install --no-cache-dir \
+    git+https://github.com/geraldthewes/topic-treeseg.git \
+    git+https://github.com/geraldthewes/multistep-transcriber.git
 # Install remaining requirements
 COPY docker/requirements.txt /app/
 RUN pip3 install --no-cache-dir -r requirements.txt
