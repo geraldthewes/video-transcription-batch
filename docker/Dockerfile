@@ -33,8 +33,8 @@ WORKDIR /app
 # Copy Python environment from builder stage
 COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
-# Install git packages in final stage to ensure they're available
-RUN pip3 install --no-cache-dir \
+# Install git packages without dependencies (deps already copied from builder)
+RUN pip3 install --no-cache-dir --no-deps \
     git+https://github.com/geraldthewes/topic-treeseg.git \
     git+https://github.com/geraldthewes/multistep-transcriber.git
 COPY docker/app/ /app/
