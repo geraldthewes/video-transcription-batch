@@ -3,7 +3,7 @@
   "base_url": "http://10.0.2.70:8888/v1",
   "sessionTokenLimit": "262144",
   "mcpServers": {
-    "nomad-builder": {
+    "build-server": {
       "httpUrl": "http://fabio.service.consul:9999/build/mcp/stream",
       "timeout": 30000,
       "trust": true
