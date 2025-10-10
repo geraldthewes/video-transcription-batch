@@ -29,73 +29,8 @@ video-transcription-batch/
 ```
 
 ## Container Build
-⚠️ **Important**: The Docker container should be built using the Nomad MCP build service, not locally on this machine.
+⚠️ **Important**: The Docker container should be built following the instructions in [BUILD.md][BUILD.md]
 
-### MCP Build Service
-The project uses the [Nomad MCP Builder](https://github.com/geraldthewes/nomad-mcp-builder) service integrated via MCP:
-
-**MCP Server Configuration:**
-```bash
-claude mcp add --transport http build-server https://fabio.service.consul:9999/build/mcp/stream
-```
-
-### Build Using MCP Tools
-
-🚨 **CRITICAL WARNING: COMMIT FIRST!** 🚨
-**The MCP build service clones from git - changes MUST be committed and pushed before building or builds will use old code!**
-
-Use the MCP build service tools (available in Claude sessions after MCP server is added):
-
-**Build Job Parameters:**
-Please consult the latest documentation on fields available in submitJob. But the most commons are listed below. Please use semantic versioning for versions not vx.y.z.
-
-
-```json
-{
-  "repo_url": "https://github.com/geraldthewes/video-transcription-batch.git",
-  "git_ref": "main",
-  "dockerfile_path": "docker/Dockerfile",
-  "image_name": "video-transcription-batch",
-  "image_tags": ["latest", "vx.y.z"],
-  "registry_url": "registry.cluster:5000",
-  "owner": "agent",
-  "resource_limits": {
-      "cpu": "2000",     // 2000 MHz (2 CPU cores)
-      "memory": "16384",  // (16 GB RAM)
-      "disk": "20480"    // 20480 MB (20 GB disk)
-  }
-}
-```
-
-**⚠️ IMPORTANT**: Do NOT include `git_credentials_path` or `registry_credentials_path` parameters as they are not needed for this public repository and will cause build failures.
-
-**Note**: The `dockerfile_path` is `"docker/Dockerfile"` due to the reorganized structure. The Dockerfile has been updated to use paths relative to the repository root (e.g., `COPY docker/requirements.txt /app/`). No `test_commands` are included initially.
-
-### Build Features
-- Three-phase pipeline: Build → Test → Publish
-- WebSocket log streaming for real-time monitoring
-- Integration with private registries (registry.cluster:5000)
-- Rootless Buildah for secure builds
-
-This is a large CUDA project, ensure the system is built, published and tested with sufficioent resources:
-- Reserved CPU 2,000 MHz 
-- Reserved Memory 16,384 MiB 
-- Reserved Disk 20 Gb 
-
-
-### Build Status
-✅ **Latest Build**: Job `278de965-6153-4e0e-9008-c1363d612362` completed successfully on 2025-09-12 - v4.0.0
-- **Major Refactor**: Unified S3 structure and environment-based configuration
-- Simplified transcriber bucket with organized job directories
-- Removed legacy video/output bucket separation
-- Added config.json support for per-job transcription parameters
-- Container environment variable simplification
-- Image: `registry.cluster:5000/video-transcription-batch:v4.0.0`
-
-✅ **Previous Builds**: 
-- Job `399b9a73-084e-4352-a5d0-76ea9a8c7c83` (v3.0.0) - S3-only configuration
-- Job `ae47464b-5c50-460f-b79f-357bcc6de589` (v2.0.0) - Added S3-based configuration  
-- Job `71487294-1af4-416e-8bf0-febf3133af43` (v1.0.0) - Initial working version
 
 ### Container Contents
 The built container includes:

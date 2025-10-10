@@ -1,16 +1,11 @@
 {
   "apiKey": "***",
-  "base_url": "http://10.0.2.70:8888/v1",
-  "sessionTokenLimit": "262144",
+  "base_url": "http://10.0.1.14:8000/v1",
+  "sessionTokenLimit": " 131072",
   "mcpServers": {
-    "build-server": {
-      "httpUrl": "http://fabio.service.consul:9999/build/mcp/stream",
-      "timeout": 30000,
-      "trust": true
-    },
     "serena": {
       "command": "/home/gerald/miniconda3/envs/video-batch/bin/uv",
-      "args": ["run", "--directory", "/media/gerald/SSDT71/software/serena", "serena", "start-mcp-server"],
+      "args": ["run", "--directory", "/home/gerald/software/serena", "serena", "start-mcp-server"],
       "timeout": 30000,
       "trust": true
     }
