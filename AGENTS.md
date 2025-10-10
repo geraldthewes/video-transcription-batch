@@ -25,12 +25,8 @@ video-transcription-batch/
 │   ├── config.example.json  # Configuration template
 │   └── tasks.example.json   # Task configuration template
 ├── pyproject.toml           # Python package definition
-└── CLAUDE.md               # This documentation
+└── AGENTS.md                # Code agent documentation
 ```
-
-## Container Build
-⚠️ **Important**: The Docker container should be built following the instructions in [BUILD.md][BUILD.md]
-
 
 ### Container Contents
 The built container includes:
@@ -254,7 +250,7 @@ result = client.get_result(job.id)
 **IMPORTANT**: When making significant changes to this project:
 
 ### Documentation Synchronization
-- **ALWAYS update both CLAUDE.md AND README.md** when making structural, configuration, or API changes
+- **ALWAYS update both AGENTS.md AND README.md** when making structural, configuration, or API changes
 - README.md serves as the primary user-facing documentation and must stay in sync with CLAUDE.md
 - Both files should accurately reflect the current version, capabilities, and usage patterns
 - Version numbers, examples, and configuration instructions must be consistent across both files
@@ -272,31 +268,3 @@ result = client.get_result(job.id)
 - Version updates and breaking changes
 - New features or removed functionality
 
-### Container Build Requirements
-
-⚠️ **CRITICAL: COMMIT AND PUSH BEFORE BUILDING** ⚠️
-
-**The MCP build service builds from the git repository, NOT from local files. All changes MUST be committed and pushed before triggering builds, or the build will use old versions of your files.**
-
-**PRE-BUILD CHECKLIST:**
-1. ✅ **COMMIT ALL CHANGES**: `git add .` and `git commit -m "..."`
-2. ✅ **PUSH TO REMOTE**: `git push origin main`
-3. ✅ **VERIFY PUSH**: Check that changes appear on GitHub
-4. ✅ **THEN BUILD**: Use MCP build service
-
-**Build When These Change:**
-- **ALWAYS trigger a new container build** when making changes that affect the Docker container:
-  - Changes to `docker/app/main.py` (container application code)
-  - Changes to `docker/Dockerfile` or `docker/requirements.txt`
-  - Environment variable handling changes in the container
-  - New transcription configuration features
-- **Monitor build progress** and update CLAUDE.md with successful build status
-- Use the MCP build service to ensure consistency and proper tagging
-- Update version references in documentation after successful builds
-
-**Cache Issues:**
-- Docker cache is extremely persistent across builds
-- If changes don't appear, add cache-busting comments to Dockerfile
-- Consider changing file content (not just comments) to force cache invalidation
-
-This ensures users always have accurate, up-to-date information regardless of which documentation file they reference.
