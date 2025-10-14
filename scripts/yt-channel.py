@@ -30,7 +30,19 @@ def get_channel_id(youtube, handle):
         channel = response['items'][0]
         return channel['id'], channel['contentDetails']['relatedPlaylists']['uploads']
     else:
-        raise ValueError(f"Channel with handle '{handle}' not found.")
+        # Try to get channel by ID directly if handle fails
+        try:
+            request = youtube.channels().list(
+                part='id,contentDetails',
+                id=handle
+            )
+            response = request.execute()
+            if 'items' in response and response['items']:
+                channel = response['items'][0]
+                return channel['id'], channel['contentDetails']['relatedPlaylists']['uploads']
+        except:
+            pass
+        raise ValueError(f"Channel with handle '{handle}' not found. If you're using a channel ID, try using the --channel_id flag instead.")
 
 def get_all_videos(youtube, playlist_id):
     videos = []
