@@ -11,7 +11,7 @@ retrying>=1.3.4
 spacy>=3.7.0
 
 # Dependencies required by multistep-transcriber (for --no-deps install)
-ctranslate2>=4.4.0
+ctranslate2>=4.6.0
 faster-whisper
 transformers
 sentence_transformers
