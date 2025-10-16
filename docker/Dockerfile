@@ -19,7 +19,7 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 RUN mkdir -p /tmp /var/tmp && python3 -m spacy download en_core_web_sm
 
 # Final stage
-FROM docker.io/nvidia/cuda:12.8.0-cudnn-runtime-ubuntu24.04
+FROM docker.io/nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     python3.12 \
