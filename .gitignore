@@ -28,6 +28,7 @@ ENV/
 .venv/
 .env
 tests/
+deploy/builds/
 
 # IDEs
 .vscode/

@@ -128,7 +128,7 @@ pip install -e .
 cp env-template .env
 # Edit .env with your AWS and service configuration
 
-# 3. Create tasks file
+# 3. Create sample tasks file to edit
 python -m scripts.batch_transcribe create-task --output my-videos.json
 
 # 4. Upload tasks with transcription parameters
@@ -150,6 +150,29 @@ docker run --gpus all \
 ```
 
 ## CLI Utilities
+
+### yt-channel
+
+To create a transcription file for a complete You-Tube channel
+
+1. First, you need to obtain a YouTube Data API v3 key from the Google Cloud Console:
+  - Go to https://console.cloud.google.com/
+  - Create a project, enable the YouTube Data API v3, and generate an API key.
+
+2. Set the GOOGLE_CLOUD_PROJECT_KEY environment variable with your API key:
+
+  - export GOOGLE_CLOUD_PROJECT_KEY="your_api_key_here"
+
+3. Run the script with the channel handle as a command-line argument:
+
+```
+python3 yt-channel.py --channel_handle geraldhewes
+```
+
+The script will:
+ - Retrieve the channel ID and uploads playlist ID for the specified channel handle
+ - Fetch all videos from the channel's uploads playlist
+ - Save the video metadata (URL, title, published date, description) to a JSON file named after the channel (e.g., Channel_videos.json)
 
 ### batch-transcribe
 
