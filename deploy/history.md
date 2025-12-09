@@ -1,5 +1,49 @@
 # Build History
 
+## 0088dfa3-c621-499b-9513-d5b232d26361 (2025-10-16 10:17:28 UTC)
+**Branch**: main | **Git Ref**: main
+**Status**: ❌ FAILED | **Duration**: 13m46s
+**Tags**: latest
+**Error**: Test phase failed in job test-entry-0088dfa3-c621-499b-9513-d5b232d26361: Task 'main': Not Restarting - Policy allows no restarts
+
+## 0088dfa3-c621-499b-9513-d5b232d26361 (2025-10-16 10:17:28 UTC)
+**Branch**: main | **Git Ref**: main
+**Status**: ⏳ PENDING
+**Tags**: latest
+
+## 3b9ac732-4787-424c-8562-4bf31f9cd49e (2025-10-16 10:08:25 UTC)
+**Branch**: main | **Git Ref**: main
+**Status**: ❌ FAILED | **Duration**: 14s
+**Tags**: latest
+**Error**: Build phase failed: Task 'main': Not Restarting - Policy allows no restarts
+
+## 3b9ac732-4787-424c-8562-4bf31f9cd49e (2025-10-16 10:08:25 UTC)
+**Branch**: main | **Git Ref**: main
+**Status**: ⏳ PENDING
+**Tags**: latest
+
+## 48154f19-5e41-4d36-86b8-1f4734c3a78c (2025-10-16 09:46:05 UTC)
+**Branch**: main | **Git Ref**: main
+**Status**: ❌ FAILED | **Duration**: 23s
+**Tags**: latest
+**Error**: Build phase failed: Task 'main': Not Restarting - Policy allows no restarts
+
+## 48154f19-5e41-4d36-86b8-1f4734c3a78c (2025-10-16 09:46:05 UTC)
+**Branch**: main | **Git Ref**: main
+**Status**: ⏳ PENDING
+**Tags**: latest
+
+## 500d81f9-1adc-4110-a5b6-c793d2c76c42 (2025-10-16 09:37:40 UTC)
+**Branch**: main | **Git Ref**: main
+**Status**: ❌ FAILED | **Duration**: 18s
+**Tags**: latest
+**Error**: Build phase failed: Task 'main': Not Restarting - Policy allows no restarts
+
+## 500d81f9-1adc-4110-a5b6-c793d2c76c42 (2025-10-16 09:37:40 UTC)
+**Branch**: main | **Git Ref**: main
+**Status**: ⏳ PENDING
+**Tags**: latest
+
 ## b7614ec4-7b2d-4291-b5f3-71b2fb7f87a7 (2025-10-16 09:09:40 UTC)
 **Branch**: main | **Git Ref**: main
 **Status**: ❌ FAILED | **Duration**: 10m14s

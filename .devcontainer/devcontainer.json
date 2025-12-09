@@ -1,0 +1,16 @@
+{
+    "name": "Video Ingestion Batch",
+    "image": "registry.cluster:5000/devcontainer-python:20251106b", // https://github.com/geraldthewes/nomad-docker-images
+    "remoteUser": "vscode",  // Non-root user for security; change if needed
+    "postCreateCommand": "./post-setup.sh",
+    "containerEnv": {
+	"PYTHONPATH": "${containerWorkspaceFolder}"
+    },
+    "remoteEnv": {
+	"OLLAMA_HOST": "http://ollama.cluster:11434",
+	"OPENAI_API_KEY": "***",
+	"OPENAI_MODEL": "QuantTrio/Qwen3-Coder-30B-A3B-Instruct-AWQ",
+	"OPENAI_BASE_URL":"http://vllm.cluster:8000/v1",
+	
+  }
+}
